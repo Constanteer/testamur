@@ -25,13 +25,7 @@ def _set(value: Any) -> set[str]:
 
 
 def _constraint_set(constraints: Mapping[str, Any], *aliases: str) -> set[str]:
-    """Read synonymous set-valued constraints without treating spelling as authority.
-
-    Providers commonly project `scope` vs `scopes` and `audience` vs `audiences`.
-    They are semantic aliases, not independent gates. If more than one spelling is
-    present we conservatively union the values; attenuation still requires the child
-    set to be a non-empty subset of the parent's effective set.
-    """
+    """Read synonymous set-valued constraints without treating spelling as authority."""
     result: set[str] = set()
     for key in aliases:
         result.update(_set(constraints.get(key)))
@@ -117,7 +111,6 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     if pc.get("expires_at") is not None:
         parent_expiry = _parse_time(pc.get("expires_at"))
         child_expiry = _parse_time(cc.get("expires_at"))
-        # Invalid/unknown expiry cannot establish attenuation.
         if parent_expiry is None or child_expiry is None or child_expiry > parent_expiry:
             return False
 
@@ -156,6 +149,52 @@ def capability_allowed(capability: Mapping[str, Any], budget: CapabilityBudget |
     )
 
 
+def edge_capabilities(
+    edge: Mapping[str, Any],
+    *,
+    budget: CapabilityBudget | None,
+    implicit_capability: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Project only capabilities exercisable within an inherited delegation budget.
+
+    Mere edge connectivity never manufactures a capability. Callers may provide an
+    explicit semantic capability for relation types whose meaning itself denotes an
+    action (for example CAN_READ); HAS_CAPABILITY/DELEGATES must carry their own
+    capability payloads.
+    """
+    raw = [
+        dict(item)
+        for item in edge.get("capabilities") or []
+        if isinstance(item, Mapping)
+    ]
+    if not raw and implicit_capability is not None:
+        raw.append(dict(implicit_capability))
+    return [item for item in raw if capability_allowed(item, budget)]
+
+
+def delegation_budget(
+    edge: Mapping[str, Any],
+    inherited: CapabilityBudget | None,
+    *,
+    delegation_relation: str = "DELEGATES",
+) -> CapabilityBudget | None:
+    """Return the effective downstream budget for an authority edge.
+
+    A DELEGATES edge with no explicit capabilities is intentionally an empty budget,
+    never unrestricted authority. Non-delegation edges with no capability payload
+    preserve the inherited budget. When capabilities are present they must attenuate
+    the inherited budget including all constraints, not only namespace/action/resource.
+    """
+    capabilities = [
+        dict(item)
+        for item in edge.get("capabilities") or []
+        if isinstance(item, Mapping)
+    ]
+    if not capabilities:
+        return () if str(edge.get("relation_type") or "") == delegation_relation else inherited
+    return attenuate_budget(capabilities, inherited)
+
+
 def project_budget(budget: CapabilityBudget | None) -> list[dict[str, Any]] | None:
     """Stable JSON projection for reachability/CLI/ProductService/Web surfaces."""
     if budget is None:
@@ -168,5 +207,7 @@ __all__ = [
     "capability_is_attenuation",
     "attenuate_budget",
     "capability_allowed",
+    "edge_capabilities",
+    "delegation_budget",
     "project_budget",
 ]
