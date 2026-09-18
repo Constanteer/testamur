@@ -64,3 +64,76 @@ def test_connectivity_without_capability_does_not_infer_permission():
     budget = delegation_budget({"relation_type": "CAN_CONNECT"}, None)
     assert budget is None
     assert edge_capabilities({"relation_type": "CAN_CONNECT"}, budget=budget) == []
+
+
+def test_connectivity_rejects_even_caller_supplied_implicit_capability():
+    implicit = {
+        "namespace": "testamur",
+        "action": "connect",
+        "resource": "service:api",
+        "constraints": {},
+    }
+    assert edge_capabilities(
+        {"relation_type": "CAN_CONNECT", "target_ref": "service:api"},
+        budget=None,
+        implicit_capability=implicit,
+    ) == []
+
+
+def test_authorized_action_relation_may_supply_semantic_implicit_capability():
+    implicit = {
+        "namespace": "testamur",
+        "action": "read",
+        "resource": "artifact:manifest",
+        "constraints": {},
+    }
+    assert edge_capabilities(
+        {"relation_type": "CAN_READ", "target_ref": "artifact:manifest"},
+        budget=None,
+        implicit_capability=implicit,
+    ) == [implicit]
+
+
+def test_issuer_and_tenant_constraints_cannot_be_dropped_or_widened():
+    parent = _cap()
+    parent["constraints"].update(
+        {
+            "required_issuer": ["https://token.actions.githubusercontent.com"],
+            "tenant_id": ["installation:42", "installation:43"],
+        }
+    )
+    budget = delegation_budget(
+        {"relation_type": "DELEGATES", "capabilities": [parent]},
+        None,
+    )
+
+    narrowed = _cap()
+    narrowed["constraints"].update(
+        {
+            "issuer": ["https://token.actions.githubusercontent.com"],
+            "tenant": ["installation:42"],
+        }
+    )
+    assert edge_capabilities(
+        {"relation_type": "HAS_CAPABILITY", "capabilities": [narrowed]},
+        budget=budget,
+    ) == [narrowed]
+
+    missing_issuer = _cap()
+    missing_issuer["constraints"].update({"tenant": ["installation:42"]})
+    assert edge_capabilities(
+        {"relation_type": "HAS_CAPABILITY", "capabilities": [missing_issuer]},
+        budget=budget,
+    ) == []
+
+    cross_tenant = _cap()
+    cross_tenant["constraints"].update(
+        {
+            "issuer": ["https://token.actions.githubusercontent.com"],
+            "tenant": ["installation:99"],
+        }
+    )
+    assert edge_capabilities(
+        {"relation_type": "HAS_CAPABILITY", "capabilities": [cross_tenant]},
+        budget=budget,
+    ) == []
