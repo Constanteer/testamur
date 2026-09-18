@@ -1,52 +1,76 @@
 # Quick launch
 
-This repository is a **Testamur / MathHub transition workspace**. Do not use the retired Witness release path or treat GitHub Actions as required release infrastructure.
+## 1. Install
 
-For product ownership and boundaries, start with [`README.md`](README.md) and [`docs/TESTAMUR_COMPLETION_SPEC.md`](docs/TESTAMUR_COMPLETION_SPEC.md).
-
-## 1. Validate the exact checkout
-
-After updating the branch you intend to run:
+Testamur requires Python 3.11 or newer.
 
 ```bash
-git pull --ff-only
-bash scripts/testamur_local_gate.sh smoke
+git clone https://github.com/Constanteer/testamur.git
+cd testamur
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
 
-Before treating a Testamur checkout as a release candidate, run the repository-local release gate on that **exact head**:
-
-```bash
-bash scripts/testamur_local_gate.sh release
-```
-
-GitHub Actions may also execute checks when configured, but Actions being deleted, unavailable, queued, or runner-starved is not itself a release blocker. An unexecuted check is never evidence of success; use the local gate instead.
-
-## 2. Run Testamur locally
-
-Install the current package in the environment you want to test, then use the canonical entrypoints:
+## 2. Check the local CLI
 
 ```bash
 testamur --help
 testamur status
+```
+
+## 3. Start the local Web workspace
+
+```bash
 testamur-web
 ```
 
-The Web surface is a projection over the same Testamur product semantics as the CLI/local core; it is not a second evidence engine.
+The Web interface uses the same canonical Testamur state as the CLI.
 
-Do not expose a local Testamur or MathHub process directly to the public Internet merely because it starts successfully. Authentication, hosted authorization, billing, retention administration, production database orchestration, and deployment secrets belong to the separate hosted service-plane boundary described in the completion specification.
+## 4. Source Gateway
 
-## 3. MathHub
+For exact-revision source access:
 
-MathHub remains a distinct mathematical knowledge/proof-graph project in this transition repository. Its canonical product description is [`docs/MATHHUB_PRODUCT.md`](docs/MATHHUB_PRODUCT.md).
+```bash
+testamur-gateway
+```
 
-The canonical MathHub entrypoint must remain independent of the retired Witness runtime. Testamur and MathHub may share provenance infrastructure, but neither should require a hidden Witness package to start.
+For MCP hosts, configure the local stdio command:
 
-## 4. Public preview / hosted deployment
+```text
+testamur-gateway-mcp
+```
 
-There is intentionally no canonical production-hosting recipe in this transition document. A disposable local preview is not equivalent to a supported hosted deployment, and old machine-specific runner/tunnel instructions are not release requirements.
+Do not treat the MCP process as an interactive CLI; the host should start it over stdio.
 
-When the repository split is performed, deployment instructions should live with the private hosted/service-plane repository and describe the actual authenticated edge, worker, database, retention, and secret-management topology used there.
+## 5. State location
 
-## Release rule
+Optional environment overrides:
 
-A Testamur release candidate is supported by an executed local release gate for its exact commit plus the structural namespace/repository audit. Do not substitute stale green results from an older SHA, and do not block unrelated cleanup solely because GitHub Actions is unavailable.
+```bash
+export TESTAMUR_HOME=/path/to/testamur-state
+export TESTAMUR_DB=/path/to/evidence.db
+```
+
+## 6. Validate a checkout
+
+Install pytest, then run:
+
+```bash
+python -m pip install -U pytest
+bash scripts/testamur_local_gate.sh smoke
+bash scripts/testamur_local_gate.sh release
+```
+
+`release` requires a clean tracked checkout so its result identifies an exact commit.
+
+The semantic invariants remain:
+
+```text
+recorded != verified
+fetched != relied
+changed != invalid
+stale != false
+lineage != affectedness verdict
+```
