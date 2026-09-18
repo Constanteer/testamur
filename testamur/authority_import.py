@@ -28,6 +28,19 @@ def _strings(value: Any, field: str) -> list[str]:
     return sorted({_text(item, f"{field}[]") for item in values})
 
 
+def _exact_evidence_items(evidence: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Reject importer evidence that is not pinned to an exact source revision."""
+    result: list[dict[str, Any]] = []
+    for raw in evidence:
+        item = dict(raw)
+        _text(item.get("ref"), "evidence.ref")
+        _text(item.get("revision"), "evidence.revision")
+        result.append(item)
+    if not result:
+        raise ValueError("imported authority facts require explicit exact evidence")
+    return result
+
+
 def exact_evidence(
     *,
     ref: str,
@@ -105,6 +118,77 @@ def record_credential_observation(
     )
 
 
+def record_credential_acceptance(
+    store: TestamurAuthorityStore,
+    *,
+    service_ref: str,
+    credential_ref: str,
+    evidence: Iterable[Mapping[str, Any]],
+    audience: Sequence[str] | str | None = None,
+    required_scopes: Sequence[str] | str | None = None,
+    constraints: Mapping[str, Any] | None = None,
+    boundary_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Record service-side acceptance of one exact credential.
+
+    Audience/scope metadata on a token is never enough to manufacture this edge. The
+    importer must have exact evidence for the service-side acceptance fact itself.
+    """
+    merged = dict(constraints or {})
+    audiences = _strings(audience, "audience")
+    scopes = _strings(required_scopes, "required_scopes")
+    if audiences:
+        merged["audience"] = audiences
+    if scopes:
+        merged["required_scopes"] = scopes
+    return store.record_edge(
+        _text(service_ref, "service_ref"),
+        AuthorityRelationType.ACCEPTS_CREDENTIAL,
+        _text(credential_ref, "credential_ref"),
+        constraints=merged,
+        evidence=_exact_evidence_items(evidence),
+        boundary_refs=boundary_refs,
+        metadata={"permission_source": "explicit_service_acceptance"},
+    )
+
+
+def record_authentication_authority(
+    store: TestamurAuthorityStore,
+    *,
+    credential_ref: str,
+    principal_ref: str,
+    service_ref: str,
+    evidence: Iterable[Mapping[str, Any]],
+    audience: Sequence[str] | str | None = None,
+    required_scopes: Sequence[str] | str | None = None,
+    constraints: Mapping[str, Any] | None = None,
+    boundary_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Record an explicit credential -> principal authentication authority statement.
+
+    service_ref is mandatory so reachability can require a separate
+    ACCEPTS_CREDENTIAL fact for the same credential. This intentionally prevents
+    issuer/audience/scope coincidence or graph adjacency from becoming authority.
+    """
+    merged = dict(constraints or {})
+    merged["service_ref"] = _text(service_ref, "service_ref")
+    audiences = _strings(audience, "audience")
+    scopes = _strings(required_scopes, "required_scopes")
+    if audiences:
+        merged["audience"] = audiences
+    if scopes:
+        merged["required_scopes"] = scopes
+    return store.record_edge(
+        _text(credential_ref, "credential_ref"),
+        AuthorityRelationType.CAN_AUTHENTICATE_AS,
+        _text(principal_ref, "principal_ref"),
+        constraints=merged,
+        evidence=_exact_evidence_items(evidence),
+        boundary_refs=boundary_refs,
+        metadata={"permission_source": "explicit_authentication_authority"},
+    )
+
+
 def record_connector_delegation(
     store: TestamurAuthorityStore,
     *,
@@ -129,7 +213,7 @@ def record_connector_delegation(
         _text(connector_ref, "connector_ref"),
         capabilities=caps,
         constraints=dict(constraints or {}),
-        evidence=evidence,
+        evidence=_exact_evidence_items(evidence),
         boundary_refs=boundary_refs,
         metadata={"permission_source": "explicit_delegation"},
     )
