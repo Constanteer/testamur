@@ -28,14 +28,36 @@ def _strings(value: Any, field: str) -> list[str]:
     return sorted({_text(item, f"{field}[]") for item in values})
 
 
+def _validated_evidence_item(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one imported authority fact's exact evidence record.
+
+    Callers are allowed to pass hand-built evidence dictionaries, so invariants must
+    be enforced here rather than relying on use of exact_evidence(). In particular,
+    DERIVED authority without analyzer identity/version is not reproducible evidence.
+    """
+    item = dict(raw)
+    item["ref"] = _text(item.get("ref"), "evidence.ref")
+    item["revision"] = _text(item.get("revision"), "evidence.revision")
+    try:
+        klass = AuthorityEvidenceClass(str(item.get("evidence_class"))).value
+    except ValueError as exc:
+        raise ValueError(
+            "evidence.evidence_class must be OBSERVED, DERIVED, or DECLARED"
+        ) from exc
+    item["evidence_class"] = klass
+    if klass == AuthorityEvidenceClass.DERIVED.value:
+        item["analyzer"] = _text(item.get("analyzer"), "evidence.analyzer")
+        item["analyzer_version"] = _text(
+            item.get("analyzer_version"), "evidence.analyzer_version"
+        )
+    if item.get("observed_at") is not None:
+        item["observed_at"] = _text(item.get("observed_at"), "evidence.observed_at")
+    return item
+
+
 def _exact_evidence_items(evidence: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Reject importer evidence that is not pinned to an exact source revision."""
-    result: list[dict[str, Any]] = []
-    for raw in evidence:
-        item = dict(raw)
-        _text(item.get("ref"), "evidence.ref")
-        _text(item.get("revision"), "evidence.revision")
-        result.append(item)
+    result = [_validated_evidence_item(raw) for raw in evidence]
     if not result:
         raise ValueError("imported authority facts require explicit exact evidence")
     return result
@@ -55,21 +77,18 @@ def exact_evidence(
     Importers must identify the exact provider/configuration revision they parsed.
     A provider URL or account name alone is not an exact evidence basis.
     """
-    try:
-        klass = AuthorityEvidenceClass(str(evidence_class)).value
-    except ValueError as exc:
-        raise ValueError("evidence_class must be OBSERVED, DERIVED, or DECLARED") from exc
-    result: dict[str, Any] = {
-        "ref": _text(ref, "ref"),
-        "evidence_class": klass,
-        "revision": _text(revision, "revision"),
+    raw: dict[str, Any] = {
+        "ref": ref,
+        "evidence_class": str(evidence_class),
+        "revision": revision,
     }
-    if klass == AuthorityEvidenceClass.DERIVED.value:
-        result["analyzer"] = _text(analyzer, "analyzer")
-        result["analyzer_version"] = _text(analyzer_version, "analyzer_version")
+    if analyzer is not None:
+        raw["analyzer"] = analyzer
+    if analyzer_version is not None:
+        raw["analyzer_version"] = analyzer_version
     if observed_at is not None:
-        result["observed_at"] = _text(observed_at, "observed_at")
-    return result
+        raw["observed_at"] = observed_at
+    return _validated_evidence_item(raw)
 
 
 def record_credential_observation(
@@ -93,9 +112,7 @@ def record_credential_observation(
     requires an explicit evidence-bearing authority edge; this function never creates
     ACCEPTS_CREDENTIAL or CAN_AUTHENTICATE_AS from issuer/audience metadata.
     """
-    ev = dict(evidence)
-    _text(ev.get("ref"), "evidence.ref")
-    _text(ev.get("revision"), "evidence.revision")
+    ev = _validated_evidence_item(evidence)
     attributes: dict[str, Any] = {
         "audience": _strings(audience, "audience"),
         "scopes": _strings(scopes, "scopes"),
