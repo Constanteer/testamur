@@ -1455,11 +1455,12 @@ async function comparePanel(ref) {
     const right = knownRefs.has(requestedRight) ? requestedRight : defaultRight;
     const result = await api('/v1/compare', { left, right });
     const comparison = result.comparison || {};
-    const changedKeys = Object.entries(comparison).filter(([key, value]) => key.endsWith('_changed') && value === true);
+    const changedFields = Object.entries(comparison).filter(([key]) => key.endsWith('_changed'));
+    const changedKeys = changedFields.filter(([, value]) => value === true);
     const contentChanged = comparison.content_changed;
     const summary = contentChanged === true || changedKeys.length
       ? { text: 'Mechanical difference recorded', tone: 'warn' }
-      : contentChanged === false || changedKeys.length === 0
+      : contentChanged === false || (changedFields.length > 0 && changedKeys.length === 0)
         ? { text: 'No mechanical difference recorded', tone: 'good' }
         : { text: 'Difference not fully assessable', tone: 'neutral' };
     const options = items.map((item, index) => {
