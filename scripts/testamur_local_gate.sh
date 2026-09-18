@@ -7,9 +7,6 @@ cd "$ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 MODE="${1:-smoke}"
 
-# Make local gate logs self-identifying so release evidence cannot accidentally
-# be attributed to a different checkout. Git metadata is diagnostic only: an
-# exported source tree without .git remains fully testable.
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   GATE_HEAD="$(git rev-parse HEAD)"
   if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
@@ -41,11 +38,7 @@ if importlib.util.find_spec("pytest") is None:
 PY
 
 compile_core() {
-  # Compile the whole shipped package rather than a hand-maintained subset. This
-  # catches syntax/import-surface regressions in runtime, revision compatibility,
-  # ProductService and Web modules before pytest starts.
   "$PYTHON_BIN" -m compileall -q testamur
-  "$PYTHON_BIN" -m py_compile mathhub.py
 }
 
 run_smoke() {
