@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from io import StringIO
 
 import pytest
 
@@ -15,6 +17,8 @@ from testamur.authority_reachability import (
     authority_blast_radius,
     authority_reachability,
 )
+from testamur.product_cli import dispatch
+from testamur.product_service import TestamurProductService
 
 
 OBSERVED = [{"ref": "tst:evidence:observed", "evidence_class": "OBSERVED"}]
@@ -460,3 +464,56 @@ def test_end_to_end_worker_token_session_connector_repo(tmp_path):
         "boundary:workload-identity",
     ]
     assert result["truncated"] is False
+
+
+def test_product_service_and_cli_expose_authority_reachability(tmp_path):
+    product = TestamurProductService(tmp_path / "testamur.sqlite3")
+    subject(product.authority, "worker", AuthoritySubjectKind.WORKLOAD)
+    subject(product.authority, "repo", AuthoritySubjectKind.REPOSITORY)
+    product.authority.record_edge(
+        "worker",
+        AuthorityRelationType.CAN_READ,
+        "repo",
+        capabilities=[cap("github", "repo.read", "repo:demo")],
+        evidence=OBSERVED,
+    )
+
+    service_payload = product.authority_reach(
+        "worker",
+        compromise_model=CompromiseModel.PROCESS_CODE_EXECUTION.value,
+    )
+    assert service_payload["ok"] is True
+    assert service_payload["schema"] == "testamur.product.authority-reachability.v1"
+    assert any(
+        item["capability"]["action"] == "repo.read"
+        for item in service_payload["result"]["actionable_capabilities"]
+    )
+
+    output = StringIO()
+    code = dispatch(
+        [
+            "authority",
+            "reach",
+            "worker",
+            "--model",
+            CompromiseModel.PROCESS_CODE_EXECUTION.value,
+        ],
+        stdout=output,
+        service=product,
+    )
+    assert code == 0
+    cli_payload = json.loads(output.getvalue())
+    assert cli_payload["ok"] is True
+    assert cli_payload["result"]["starting_subject_ref"] == "worker"
+
+
+def test_product_service_authority_missing_subject_is_not_guessed(tmp_path):
+    product = TestamurProductService(tmp_path / "testamur.sqlite3")
+
+    payload = product.authority_reach(
+        "missing",
+        compromise_model=CompromiseModel.FULL_SUBJECT_COMPROMISE.value,
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "object_not_found"
