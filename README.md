@@ -120,6 +120,14 @@ bash scripts/testamur_local_gate.sh release
 
 The release gate validates the exact Testamur package surface and runs the current Testamur regression suite.
 
+## Release
+
+The first public release line is **v1.0.0**.
+
+## License
+
+Testamur is licensed under the [Apache License 2.0](LICENSE).
+
 ## Status
 
 Testamur is under active development. Public interfaces may still evolve, but the semantic boundary is intentional: provenance, verification, exposure, reliance, change and affectedness remain separate concepts.
