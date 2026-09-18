@@ -20,6 +20,44 @@ def test_exact_evidence_requires_revision_and_derived_analyzer():
         exact_evidence(ref="provider:iam", evidence_class="DERIVED", revision="sha256:abc")
 
 
+def test_raw_import_evidence_cannot_bypass_class_or_derived_provenance(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    with pytest.raises(ValueError, match="evidence_class"):
+        record_credential_acceptance(
+            store,
+            service_ref="service:product",
+            credential_ref="token:1",
+            evidence=[{
+                "ref": "provider:oauth",
+                "revision": "sha256:policy",
+                "evidence_class": "TRUST_ME",
+            }],
+        )
+    with pytest.raises(ValueError, match="analyzer"):
+        record_connector_delegation(
+            store,
+            delegator_ref="session:1",
+            connector_ref="connector:1",
+            capabilities=[{"namespace": "github", "action": "repo.read", "constraints": {}}],
+            evidence=[{
+                "ref": "provider:connector",
+                "revision": "sha256:installation",
+                "evidence_class": "DERIVED",
+            }],
+        )
+    with pytest.raises(ValueError, match="analyzer"):
+        record_credential_observation(
+            store,
+            credential_ref="token:1",
+            label="token",
+            evidence={
+                "ref": "provider:token",
+                "revision": "sha256:token-observation",
+                "evidence_class": "DERIVED",
+            },
+        )
+
+
 def test_credential_metadata_does_not_infer_authentication_edges(tmp_path):
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     evidence = exact_evidence(
