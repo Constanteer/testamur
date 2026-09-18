@@ -1,4 +1,9 @@
-from testamur.authority_capability import attenuate_budget, capability_allowed, capability_is_attenuation
+from testamur.authority_capability import (
+    attenuate_budget,
+    capability_allowed,
+    capability_is_attenuation,
+    project_budget,
+)
 
 
 def cap(resource=None, **constraints):
@@ -39,3 +44,56 @@ def test_inherited_budget_filters_widened_downstream_capability():
     assert budget[0]["constraints"]["approval_required"] is True
     assert capability_allowed(cap("repo:a", approval_required=True), budget)
     assert not capability_allowed(cap("repo:a"), budget)
+
+
+def test_delegation_cannot_drop_binding_or_trust_context():
+    parent = cap(
+        "repo:a",
+        audience=["github-app"],
+        service_ref=["svc:github"],
+        network_zone=["prod"],
+        device_binding=["device:1"],
+        session_binding=["session:1"],
+    )
+    assert capability_is_attenuation(
+        cap(
+            "repo:a",
+            audience=["github-app"],
+            service_ref=["svc:github"],
+            network_zone=["prod"],
+            device_binding=["device:1"],
+            session_binding=["session:1"],
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(
+        cap("repo:a", audience=["github-app"], service_ref=["svc:github"]),
+        parent,
+    )
+
+
+def test_expiry_attenuation_uses_timestamps_not_lexical_order():
+    parent = cap("repo:a", expires_at="2026-09-18T12:00:00Z")
+    # Same instant, different offset: valid attenuation.
+    assert capability_is_attenuation(
+        cap("repo:a", expires_at="2026-09-18T20:00:00+08:00"), parent
+    )
+    assert capability_is_attenuation(
+        cap("repo:a", expires_at="2026-09-18T11:59:59Z"), parent
+    )
+    assert not capability_is_attenuation(
+        cap("repo:a", expires_at="2026-09-18T12:00:01Z"), parent
+    )
+    assert not capability_is_attenuation(cap("repo:a", expires_at="not-a-time"), parent)
+
+
+def test_budget_projection_preserves_constraints_for_product_surfaces():
+    budget = attenuate_budget(
+        [cap("repo:a", approval_required=True, scopes=["contents:write"])],
+        None,
+    )
+    projected = project_budget(budget)
+    assert projected == [
+        cap("repo:a", approval_required=True, scopes=["contents:write"])
+    ]
+    assert project_budget(None) is None
