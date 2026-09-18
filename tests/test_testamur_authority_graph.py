@@ -930,7 +930,7 @@ def test_service_acceptance_constraints_are_checked_against_credential(tmp_path)
     )
     assert "credential_acceptance_constraints_unsatisfied" in blocked["reasons"]
     assert "audience_mismatch" in blocked["reasons"]
-    assert acceptance["edge_id"] not in blocked["supporting_edge_ids"]
+    assert blocked["supporting_edge_ids"] == [acceptance["edge_id"]]
 
 
 def test_matching_service_acceptance_is_preserved_as_supporting_evidence(tmp_path):
