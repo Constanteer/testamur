@@ -240,12 +240,14 @@ class TestamurProductService:
         *,
         starting_ref: str | None = None,
         expected_target_ref: str | None = None,
+        supporting_edge_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         explanation = explain_authority_path(
             self.authority,
             edge_ids,
             starting_ref=starting_ref,
             expected_target_ref=expected_target_ref,
+            supporting_edge_ids=supporting_edge_ids or (),
         )
         return {
             "ok": True,
