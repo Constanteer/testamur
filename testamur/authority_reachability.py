@@ -181,11 +181,13 @@ def _check_constraints(
     edge: Mapping[str, Any],
     *,
     at: datetime,
+    attribute_subject_ref: str | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     constraints = edge.get("constraints")
     constraints = dict(constraints) if isinstance(constraints, Mapping) else {}
     source_ref = str(edge.get("source_ref") or "")
-    attributes = _credential_attributes(store, source_ref)
+    attributes_ref = source_ref if attribute_subject_ref is None else str(attribute_subject_ref)
+    attributes = _credential_attributes(store, attributes_ref)
     reasons: list[str] = []
     unresolved: list[str] = []
 
@@ -254,6 +256,7 @@ def _check_constraints(
         "resource",
         "resource_pattern",
         "principal",
+        "service_ref",
     }
     for key, raw in constraints.items():
         if key in evaluated:
@@ -263,6 +266,65 @@ def _check_constraints(
 
     return not reasons and not unresolved, sorted(set(reasons)), sorted(set(unresolved))
 
+
+def _authentication_acceptance(
+    store: TestamurAuthorityStore,
+    edge: Mapping[str, Any],
+    *,
+    at: datetime,
+) -> tuple[bool, list[str], list[str], list[str], bool]:
+    """Validate optional service-side credential acceptance evidence.
+
+    A direct CAN_AUTHENTICATE_AS edge is already an explicit authority statement.
+    When it names constraints.service_ref, the transition additionally requires an
+    evidence-bearing ACCEPTS_CREDENTIAL edge from that service to the exact
+    credential. Supporting evidence remains separate from the contiguous attack path.
+    """
+
+    constraints = edge.get("constraints")
+    constraints = dict(constraints) if isinstance(constraints, Mapping) else {}
+    service_ref = str(constraints.get("service_ref") or "").strip()
+    if not service_ref:
+        return True, [], [], [], False
+
+    credential_ref = str(edge.get("source_ref") or "").strip()
+    candidates = store.list_edges(
+        source_ref=service_ref,
+        target_ref=credential_ref,
+        relation_type=AuthorityRelationType.ACCEPTS_CREDENTIAL,
+    )
+    if not candidates:
+        return False, [], ["credential_acceptance_not_established"], [], False
+
+    accumulated_reasons: set[str] = set()
+    accumulated_unresolved: set[str] = set()
+    all_declared_only = True
+    for candidate in candidates:
+        all_declared_only = all_declared_only and _edge_is_declared_only(candidate)
+        ok, reasons, unresolved = _check_constraints(
+            store,
+            candidate,
+            at=at,
+            attribute_subject_ref=credential_ref,
+        )
+        if ok:
+            return (
+                True,
+                [str(candidate["edge_id"])],
+                [],
+                [],
+                _edge_is_declared_only(candidate),
+            )
+        accumulated_reasons.update(reasons)
+        accumulated_unresolved.update(unresolved)
+
+    return (
+        False,
+        [],
+        sorted({"credential_acceptance_constraints_unsatisfied", *accumulated_reasons}),
+        sorted(accumulated_unresolved),
+        all_declared_only,
+    )
 
 def _implicit_capability(edge: Mapping[str, Any]) -> dict[str, Any] | None:
     relation = str(edge.get("relation_type") or "")
