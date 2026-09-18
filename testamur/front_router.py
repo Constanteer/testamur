@@ -57,6 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  testamur project list\n"
             "  testamur project show <name|id>\n"
             "  testamur project refresh <name|id>\n"
+            "  testamur project import [path] [--name <name>] [--visibility private|public]\n"
             "  testamur monitor add --project <name|id> --locator <url> [--interval manual|5m|15m|1h|6h|24h]\n"
             "  testamur monitor add --project <name|id> --provider <name> --provider-config <json>\n"
             "  testamur monitor list --project <name|id>\n"
