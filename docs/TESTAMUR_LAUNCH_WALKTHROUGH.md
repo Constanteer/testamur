@@ -1,0 +1,104 @@
+# Testamur launch walkthrough
+
+Status: canonical narration, shot, caption, and browser-walkthrough source of truth.
+
+This walkthrough is deliberately product-first. It demonstrates the same first-use loop as `TESTAMUR_ONBOARDING.md` and must not introduce a second ontology or a generic trust score.
+
+## 90-second launch cut
+
+| Time | Product surface | Shot / action | Narration | On-screen semantic guardrail |
+| --- | --- | --- | --- | --- |
+| 0:00–0:08 | Dashboard | Open a new workspace. Show the three-step first-run checklist. | “Testamur records the exact basis behind work, then tells you when that basis changes and what may need review.” | `recorded ≠ verified` |
+| 0:08–0:20 | New Project | Create `Release evidence`. | “A Project is the place where you organize what you are watching and the work that depends on it.” | Do not ask for a Source during Project creation. |
+| 0:20–0:32 | Add Monitor | Add a repository, package, document, API, or other supported target. | “A Monitor watches a specific source. Fetching it records an observation; fetching alone does not mean you relied on it.” | `fetched ≠ relied` |
+| 0:32–0:42 | First observation | Record the first revision and open its detail. | “This is the recorded version and its evidence. Recording is not a claim that the source is true or verified.” | `recorded ≠ verified` |
+| 0:42–0:52 | Demo Project | Switch to the deterministic read-only example and reveal a newer revision. | “Later, the source changes. Change is an event, not a verdict.” | `changed ≠ invalid` |
+| 0:52–1:02 | Compare | Open old ↔ new mechanical comparison. | “Compare shows what mechanically changed between the two recorded revisions.” | Do not infer validity from the diff. |
+| 1:02–1:13 | Impact | Follow recorded reliance edges to affected work. | “Impact answers a narrower question: which recorded work actually relied on the changed basis and may need review?” | `EXPOSED_TO_MODEL ≠ RELIED` |
+| 1:13–1:22 | Revalidation | Open one affected item, inspect evidence, then record an explicit revalidation. | “You inspect the evidence and decide. Revalidation records that decision; Testamur does not replace it with a score.” | `stale ≠ false` |
+| 1:22–1:30 | Help / integrations | Open Help, then show Quickstart, Learn, Docs, Codex/MCP/plugin install entry points. | “Start with the five-minute quickstart, explore the example, or connect Testamur to the tools where work already happens.” | Canonical semantics remain inspectable from Docs. |
+
+## Five-minute live walkthrough
+
+### 0. Orient — Dashboard
+
+Start on the hosted Dashboard with an empty account. Keep the first-run checklist visible.
+
+Say: “The loop is simple: create a place for the work, monitor something it depends on, record what you saw, and come back when that basis changes.”
+
+Do not begin with canonical identifiers, lineage internals, or verification language.
+
+### 1. Create a Project
+
+Create `Release evidence`. A Project is a product container; it is not itself the monitored Source. If the UI offers an optional first Monitor, explain that the target belongs to the Monitor.
+
+Success condition: the user can tell where another Monitor would be added without learning the canonical object graph.
+
+### 2. Add a Monitor and record an observation
+
+Add a supported target and record the first observation. Open the resulting Revision.
+
+Point out separately:
+
+- what was fetched;
+- what exact revision was recorded;
+- what evidence/metadata was retained;
+- whether any work has actually recorded reliance on it.
+
+Never collapse these into “trusted”, “verified”, or a numeric confidence score.
+
+### 3. Jump to the deterministic example
+
+Use the read-only demo so the audience does not need to wait for a real upstream change. The demo must not mutate the user workspace.
+
+Show revision A, then revision B. State: “Testamur knows that B differs from A. It does not know merely from that fact that A became invalid.”
+
+### 4. Compare
+
+Open Compare from the Revision/history context. Show the mechanical delta before any Impact claim.
+
+Narration contract: “Compare is evidence about difference. It is not a validity judgment.”
+
+### 5. Impact
+
+Open Impact and follow one affected item to its recorded reliance basis. Distinguish explicit reliance from material that was only fetched or exposed to a model.
+
+Narration contract: “Impact follows recorded reliance. Something appearing in context is not automatically evidence that the result relied on it.”
+
+### 6. Revalidation
+
+Open an affected item. Inspect its previous basis, the new revision, and the comparison. Record a revalidation only after that inspection.
+
+Narration contract: “Stale means the recorded basis moved and this item may need review. It does not mean the result is false. Revalidation records a new decision against an explicit basis.”
+
+### 7. Leave a next step
+
+End in Help rather than a dead-end marketing CTA. Show these routes in order:
+
+1. **Quickstart** — create real product state in about five minutes.
+2. **Example Project** — replay the complete change → impact → revalidation loop safely.
+3. **Learn** — plain-language mental model and worked examples.
+4. **Docs** — canonical semantics, CLI, APIs, and object model.
+5. **Integrations** — Codex, MCP, plugins, and installation paths.
+
+The marketing site CTA should enter the hosted app at the same first-run path; the hosted Help surface should link back to Learn/Docs without changing terminology.
+
+## Recording checklist
+
+Before publishing a recording or screenshots, verify all of the following:
+
+- the Dashboard checklist order is Project → Monitor → first observation;
+- the demo is visibly read-only/deterministic;
+- Source and Revision appear only after the first-use mental model is established;
+- Compare precedes Impact in the changed-source story;
+- Impact demonstrates an actual recorded reliance edge;
+- Revalidation is an explicit user action, not an automatic verdict;
+- no copy says or implies `recorded = verified`;
+- no copy says or implies `fetched = relied`;
+- no copy says or implies `changed = invalid`;
+- no copy says or implies `stale = false`;
+- no copy says or implies `EXPOSED_TO_MODEL = RELIED`;
+- no generic trust/confidence score is shown;
+- the final frame contains working Quickstart, Example, Learn, Docs, and Integrations entry points.
+
+If the live UI differs from this sequence, fix the UI or update this canonical script and the onboarding contract together before recording. Do not silently narrate around product drift.
