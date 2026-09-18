@@ -88,6 +88,11 @@ def _parser() -> argparse.ArgumentParser:
     authority_show = authority_sub.add_parser("show")
     authority_show.add_argument("ref")
 
+    authority_explain = authority_sub.add_parser("explain")
+    authority_explain.add_argument("edge_ids", nargs="+")
+    authority_explain.add_argument("--start", dest="starting_ref")
+    authority_explain.add_argument("--target", dest="expected_target_ref")
+
     authority_reach = authority_sub.add_parser("reach")
     authority_reach.add_argument("ref")
     authority_reach.add_argument(
@@ -299,6 +304,12 @@ def dispatch(
         elif args.command == "authority":
             if args.authority_command == "show":
                 payload = product.authority_subject(args.ref)
+            elif args.authority_command == "explain":
+                payload = product.authority_explain(
+                    list(args.edge_ids),
+                    starting_ref=args.starting_ref,
+                    expected_target_ref=args.expected_target_ref,
+                )
             elif args.authority_command == "reach":
                 payload = product.authority_reach(
                     args.ref,
