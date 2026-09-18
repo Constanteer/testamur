@@ -83,6 +83,11 @@ def test_project_import_is_durable_and_idempotent(tmp_path) -> None:
     assert second["scan_revision_created"] is False
     assert second["dependency_revisions_created"] == 0
 
+    project = service.project("demo")
+    assert project["ok"] is True
+    assert project["supply_chain"]["scan_revision_id"] == first["scan_revision_id"]
+    assert project["supply_chain"]["dependency_count"] == 1
+
 
 def test_manifest_change_creates_new_scan_revision(tmp_path) -> None:
     root = tmp_path / "demo"
