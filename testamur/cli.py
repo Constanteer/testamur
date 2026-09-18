@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from .agent_wrapper import run_agent_command
+from .authority import TestamurAuthorityStore
+from .authority_reachability import (
+    CompromiseModel,
+    authority_blast_radius,
+    authority_reachability,
+)
 from .runtime_graph_query import local_query as _local_query
 
 from . import __version__
@@ -17,7 +23,7 @@ from .runtime_inspect import inspect_run
 from .runtime_service import EmbeddedRuntimeClient
 from .verification_store import TestamurVerificationStore
 
-COMMANDS = {"init", "status", "run", "show", "why", "trace", "impact", "verify"}
+COMMANDS = {"init", "status", "run", "show", "why", "trace", "impact", "verify", "authority"}
 
 
 def _prepare_argv(argv: list[str]) -> list[str]:
@@ -355,6 +361,36 @@ def build_parser() -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_text)
         p.add_argument("id")
 
+    p = sub.add_parser("authority", help="inspect authority/capability reachability")
+    authority_sub = p.add_subparsers(dest="authority_command", required=True)
+
+    authority_show = authority_sub.add_parser("show", help="show an authority subject and its edges")
+    authority_show.add_argument("ref")
+
+    authority_reach = authority_sub.add_parser("reach", help="trace evidence-backed compromise reachability")
+    authority_reach.add_argument("ref")
+    authority_reach.add_argument(
+        "--model",
+        required=True,
+        choices=tuple(item.value for item in CompromiseModel),
+    )
+    authority_reach.add_argument("--max-depth", type=int, default=8)
+    authority_reach.add_argument("--max-paths", type=int, default=256)
+    authority_reach.add_argument("--expansion-budget", type=int, default=10000)
+    authority_reach.add_argument("--as-of")
+
+    authority_blast = authority_sub.add_parser("blast-radius", help="summarize reachable authority from one or more compromised subjects")
+    authority_blast.add_argument("refs", nargs="+")
+    authority_blast.add_argument(
+        "--model",
+        required=True,
+        choices=tuple(item.value for item in CompromiseModel),
+    )
+    authority_blast.add_argument("--max-depth", type=int, default=8)
+    authority_blast.add_argument("--max-paths", type=int, default=256)
+    authority_blast.add_argument("--expansion-budget", type=int, default=10000)
+    authority_blast.add_argument("--as-of")
+
     p = sub.add_parser("verify", help="run a checker and bind its evidence to a target revision")
     p.add_argument("id")
     p.add_argument("--with", dest="verifier", required=True, help="checker executable, e.g. pytest")
@@ -409,6 +445,54 @@ def main(argv: list[str] | None = None) -> int:
         client = _client(env)
         receipts = _receipts(env)
         verifications = TestamurVerificationStore(receipts)
+
+        if args.command == "authority":
+            authority = TestamurAuthorityStore(env.database_path)
+            if args.authority_command == "show":
+                subject = authority.get_subject(args.ref)
+                value = {
+                    "ok": True,
+                    "schema": "testamur.cli.authority-subject.v1",
+                    "subject": subject,
+                    "incoming_edges": authority.edges_to(args.ref),
+                    "outgoing_edges": authority.edges_from(args.ref),
+                }
+            elif args.authority_command == "reach":
+                if authority.maybe_subject(args.ref) is None:
+                    raise KeyError(args.ref)
+                value = authority_reachability(
+                    authority,
+                    args.ref,
+                    compromise_model=args.model,
+                    max_depth=args.max_depth,
+                    max_paths=args.max_paths,
+                    expansion_budget=args.expansion_budget,
+                    as_of=args.as_of,
+                )
+            elif args.authority_command == "blast-radius":
+                missing = [
+                    ref for ref in args.refs if authority.maybe_subject(ref) is None
+                ]
+                if missing:
+                    raise KeyError(",".join(missing))
+                value = authority_blast_radius(
+                    authority,
+                    list(args.refs),
+                    compromise_model=args.model,
+                    max_depth=args.max_depth,
+                    max_paths=args.max_paths,
+                    expansion_budget=args.expansion_budget,
+                    as_of=args.as_of,
+                )
+            else:  # pragma: no cover - argparse owns nested command validation.
+                raise ValueError(
+                    f"unsupported authority command {args.authority_command}"
+                )
+            if args.machine:
+                print(json.dumps(value, ensure_ascii=False, sort_keys=True))
+            else:
+                _render_generic("authority", value)
+            return 0
 
         if args.command == "status":
             runtime = client.status()
