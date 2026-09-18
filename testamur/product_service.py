@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .authority import TestamurAuthorityStore
+from .authority_reachability import authority_blast_radius, authority_reachability
 from .contracts import ObjectKind, classify_object_ref, error_envelope, object_envelope
 from .product_extensions import ProductExtensions
 from .project_store import TestamurProjectStore
@@ -31,6 +33,7 @@ class TestamurProductService:
         self.records = TestamurRecordStore(self.database_path)
         self.watches = TestamurWatchStore(self.database_path)
         self.projects = TestamurProjectStore(self.database_path)
+        self.authority = TestamurAuthorityStore(self.database_path)
         self.extensions = extensions or ProductExtensions.empty()
 
     @classmethod
@@ -208,6 +211,90 @@ class TestamurProductService:
                 details={"ref": ref},
             )
         return dict(self.extensions.impact_reader(ref))
+
+    def authority_subject(self, ref: str) -> dict[str, Any]:
+        try:
+            subject = self.authority.get_subject(ref)
+        except KeyError:
+            return error_envelope(
+                "object_not_found",
+                "no canonical authority subject exists for this reference",
+                details={"ref": ref},
+            )
+        return {
+            "ok": True,
+            "schema": "testamur.product.authority-subject.v1",
+            "subject": subject,
+            "incoming_edges": self.authority.edges_to(ref),
+            "outgoing_edges": self.authority.edges_from(ref),
+            "semantics": {
+                "lineage_is_not_authority": True,
+                "connectivity_is_not_authorization": True,
+            },
+        }
+
+    def authority_reach(
+        self,
+        ref: str,
+        *,
+        compromise_model: str,
+        max_depth: int = 8,
+        max_paths: int = 256,
+        expansion_budget: int = 10000,
+        as_of: str | None = None,
+    ) -> dict[str, Any]:
+        if self.authority.maybe_subject(ref) is None:
+            return error_envelope(
+                "object_not_found",
+                "no canonical authority subject exists for this reference",
+                details={"ref": ref},
+            )
+        result = authority_reachability(
+            self.authority,
+            ref,
+            compromise_model=compromise_model,
+            max_depth=max_depth,
+            max_paths=max_paths,
+            expansion_budget=expansion_budget,
+            as_of=as_of,
+        )
+        return {
+            "ok": True,
+            "schema": "testamur.product.authority-reachability.v1",
+            "result": result,
+        }
+
+    def authority_blast(
+        self,
+        refs: list[str],
+        *,
+        compromise_model: str,
+        max_depth: int = 8,
+        max_paths: int = 256,
+        expansion_budget: int = 10000,
+        as_of: str | None = None,
+    ) -> dict[str, Any]:
+        missing = [ref for ref in refs if self.authority.maybe_subject(ref) is None]
+        if missing:
+            return error_envelope(
+                "object_not_found",
+                "one or more canonical authority subjects do not exist",
+                details={"refs": missing},
+            )
+        result = authority_blast_radius(
+            self.authority,
+            refs,
+            compromise_model=compromise_model,
+            max_depth=max_depth,
+            max_paths=max_paths,
+            expansion_budget=expansion_budget,
+            as_of=as_of,
+        )
+        return {
+            "ok": True,
+            "schema": "testamur.product.authority-blast-radius.v1",
+            "result": result,
+        }
 
     def temporal(self, ref: str, query: dict[str, Any]) -> dict[str, Any]:
         if self.extensions.temporal_reader is None:
