@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .authority import TestamurAuthorityStore
+from .authority_explain import explain_authority_path
 from .authority_reachability import authority_blast_radius, authority_reachability
 from .contracts import ObjectKind, classify_object_ref, error_envelope, object_envelope
 from .product_extensions import ProductExtensions
@@ -231,6 +232,25 @@ class TestamurProductService:
                 "lineage_is_not_authority": True,
                 "connectivity_is_not_authorization": True,
             },
+        }
+
+    def authority_explain(
+        self,
+        edge_ids: list[str],
+        *,
+        starting_ref: str | None = None,
+        expected_target_ref: str | None = None,
+    ) -> dict[str, Any]:
+        explanation = explain_authority_path(
+            self.authority,
+            edge_ids,
+            starting_ref=starting_ref,
+            expected_target_ref=expected_target_ref,
+        )
+        return {
+            "ok": True,
+            "schema": "testamur.product.authority-path-explanation.v1",
+            "result": explanation,
         }
 
     def authority_reach(
