@@ -852,3 +852,131 @@ def test_authority_reliance_bridge_matches_actual_durable_reliance(tmp_path):
     assert impact["object_match"] is True
     assert impact["revision_match"] is True
     assert impact["review_required"] is True
+
+
+def test_authentication_with_service_ref_requires_acceptance_evidence(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(
+        store,
+        "token",
+        AuthoritySubjectKind.TOKEN,
+        attributes={"audience": ["codex"], "scopes": ["session.create"]},
+    )
+    subject(store, "codex-service", AuthoritySubjectKind.SERVICE)
+    subject(store, "session", AuthoritySubjectKind.SESSION)
+
+    auth = store.record_edge(
+        "token",
+        AuthorityRelationType.CAN_AUTHENTICATE_AS,
+        "session",
+        constraints={"service_ref": "codex-service"},
+        evidence=OBSERVED,
+    )
+
+    result = authority_reachability(
+        store,
+        "token",
+        compromise_model=CompromiseModel.CREDENTIAL_THEFT,
+    )
+
+    assert not any(
+        item["subject_ref"] == "session" for item in result["reachable_subjects"]
+    )
+    blocked = next(
+        item for item in result["blocked_transitions"]
+        if item["edge_id"] == auth["edge_id"]
+    )
+    assert "credential_acceptance_not_established" in blocked["reasons"]
+
+
+def test_service_acceptance_constraints_are_checked_against_credential(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(
+        store,
+        "token",
+        AuthoritySubjectKind.TOKEN,
+        attributes={"audience": ["community"], "scopes": ["profile.read"]},
+    )
+    subject(store, "codex-service", AuthoritySubjectKind.SERVICE)
+    subject(store, "session", AuthoritySubjectKind.SESSION)
+
+    acceptance = store.record_edge(
+        "codex-service",
+        AuthorityRelationType.ACCEPTS_CREDENTIAL,
+        "token",
+        constraints={"audience": ["codex"]},
+        evidence=OBSERVED,
+    )
+    auth = store.record_edge(
+        "token",
+        AuthorityRelationType.CAN_AUTHENTICATE_AS,
+        "session",
+        constraints={"service_ref": "codex-service"},
+        evidence=OBSERVED,
+    )
+
+    result = authority_reachability(
+        store,
+        "token",
+        compromise_model=CompromiseModel.CREDENTIAL_THEFT,
+    )
+
+    assert not any(
+        item["subject_ref"] == "session" for item in result["reachable_subjects"]
+    )
+    blocked = next(
+        item for item in result["blocked_transitions"]
+        if item["edge_id"] == auth["edge_id"]
+    )
+    assert "credential_acceptance_constraints_unsatisfied" in blocked["reasons"]
+    assert "audience_mismatch" in blocked["reasons"]
+    assert acceptance["edge_id"] not in blocked["supporting_edge_ids"]
+
+
+def test_matching_service_acceptance_is_preserved_as_supporting_evidence(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(
+        store,
+        "token",
+        AuthoritySubjectKind.TOKEN,
+        attributes={"audience": ["codex"], "scopes": ["session.create"]},
+    )
+    subject(store, "codex-service", AuthoritySubjectKind.SERVICE)
+    subject(store, "session", AuthoritySubjectKind.SESSION)
+
+    acceptance = store.record_edge(
+        "codex-service",
+        AuthorityRelationType.ACCEPTS_CREDENTIAL,
+        "token",
+        constraints={
+            "audience": ["codex"],
+            "required_scopes": ["session.create"],
+        },
+        evidence=OBSERVED,
+        boundary_refs=["boundary:service-acceptance"],
+    )
+    auth = store.record_edge(
+        "token",
+        AuthorityRelationType.CAN_AUTHENTICATE_AS,
+        "session",
+        constraints={"service_ref": "codex-service"},
+        evidence=OBSERVED,
+        boundary_refs=["boundary:credential-session"],
+    )
+
+    result = authority_reachability(
+        store,
+        "token",
+        compromise_model=CompromiseModel.CREDENTIAL_THEFT,
+    )
+
+    reached = next(
+        item for item in result["reachable_subjects"]
+        if item["subject_ref"] == "session"
+    )
+    assert reached["path_edge_ids"] == [auth["edge_id"]]
+    assert reached["supporting_edge_ids"] == [acceptance["edge_id"]]
+    assert reached["boundary_refs"] == [
+        "boundary:credential-session",
+        "boundary:service-acceptance",
+    ]
