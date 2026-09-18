@@ -7,10 +7,10 @@ without requiring the legacy Python package as the implementation owner.
 
 from .store_lifecycle import install_store_connection_lifecycle
 
-__version__ = "0.3.0.dev0"
+__version__ = "1.0.0"
 
 # Keep the historical graph-store resource semantics when consumers enter through
-# the canonical namespace.  This is idempotent and imports no legacy package.
+# the canonical namespace. This is idempotent and imports no legacy package.
 install_store_connection_lifecycle()
 
 __all__ = ["__version__"]
