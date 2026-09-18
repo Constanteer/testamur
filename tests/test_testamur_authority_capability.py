@@ -99,6 +99,23 @@ def test_constraint_aliases_are_semantic_not_authority_widening():
     )
 
 
+def test_required_scope_and_audience_aliases_cannot_be_dropped():
+    parent = cap(
+        "repo:a",
+        required_scopes=["contents:write", "metadata:read"],
+        required_audience=["github-app"],
+    )
+    assert capability_is_attenuation(
+        cap("repo:a", scope=["contents:write"], audiences=["github-app"]), parent
+    )
+    assert not capability_is_attenuation(
+        cap("repo:a", scope=["contents:write"]), parent
+    )
+    assert not capability_is_attenuation(
+        cap("repo:a", scopes=["contents:write", "admin"], audience=["github-app"]), parent
+    )
+
+
 def test_plural_binding_aliases_cannot_be_dropped():
     parent = cap(
         "repo:a",
