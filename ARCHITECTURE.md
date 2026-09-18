@@ -1,245 +1,117 @@
-# MathHub Architecture
+# Testamur Architecture
 
-## 1. Mathematical ontology
+Testamur is a local-first provenance and revalidation system. Its job is not to produce a universal trust score; it preserves enough structure to answer narrower, inspectable questions:
 
-MathHub's mathematical layer is deliberately small:
+- Which exact source revision was used?
+- What did a work session observe?
+- What did the resulting work actually rely on?
+- What changed later?
+- Which downstream artifacts may need review?
+- What evidence supports that conclusion?
 
-```text
-Claim + Proof + ProofDependency
-```
+## 1. Canonical objects
 
-### Claim
+### Source, Snapshot and SourceRevision
 
-A Claim is a mathematical proposition. Public Claim registration accepts Lean `theorem` / `lemma` declarations. Definitions, structures, classes, constructors, recursors and instances belong to the formal substrate rather than becoming mathematical Claim nodes.
+A **Source** identifies something that can be observed over time: a document, repository branch, file, API resource or other external input.
 
-### Proof
+A **Snapshot** stores an observation of a Source. A **SourceRevision** gives that observation durable revision identity so downstream records can point to an exact version instead of a moving locator.
 
-A Proof is one route establishing one Claim revision. Proof source is first-class and multiple Proofs may establish the same Claim.
+This is the foundation for reproducibility and later change comparison.
 
-### ProofDependency
+### WorkSession
 
-Dependencies belong to Proofs. The public Claim graph is only a projection:
+A **WorkSession** records observable workflow activity. Agent integrations may record session and tool events, but Testamur does not claim access to hidden model reasoning.
 
-```text
-A → B
-```
-
-means that at least one active Proof establishing Claim A uses Claim B.
-
-## 2. Formal substrate
-
-Lean is the authority for formal verification.
-
-MathHub records:
-
-- exact `ConstantInfo` / Expr evidence;
-- statement references from a declaration type;
-- proof references from a theorem/proof value Expr;
-- transitive constant closure for audit/provenance;
-- exact environment information;
-- FormalBindings from Lean declaration names to Claim revisions.
-
-Statement refs do not become mathematical dependencies. Only complete proof-ref audits may generate ProofDependency records.
-
-## 3. Verification and argument witnesses
-
-Verification and argument evidence are conceptually distinct.
-
-For an ordinary local Proof they often originate from the same Build. MathHub still selects them independently:
-
-- verification witness: best Build showing the Proof is complete/kernel-checked;
-- argument witness: best Build whose dependency instrumentation completed successfully.
-
-An incomplete newer dependency audit does not erase an older complete argument route.
-
-### Imported existing theorem
-
-An imported library theorem makes this distinction especially explicit.
-
-For external theorem `Nat.add_comm`, MathHub creates a stable local verification bridge:
-
-```lean
-theorem MathHub.Import.c... : <elaborated Nat.add_comm type> := by
-  exact Nat.add_comm
-```
-
-The bridge gives the Claim an ordinary kernel-checked local Proof/Build. The external declaration `Nat.add_comm` is also FormalBound to the same Claim revision.
-
-However, the mathematical argument route must not be reduced to the bridge's trivial `exact Nat.add_comm` reference. For imported mathematics, MathHub re-inspects the **original external theorem ConstantInfo** in the exact pinned environment and appends its original proof Expr constant observations to the imported Proof's ArgumentIndex evidence.
-
-Thus:
+Exposure remains distinct from reliance:
 
 ```text
-verification evidence
-  = MathHub local alias bridge
-
-argument evidence
-  = original external theorem proof Expr refs
+observed / fetched / exposed
+            !=
+       durable reliance
 ```
 
-The local alias is provenance/verification machinery. The external declaration name is the human-facing formal name and the source of imported mathematical argument structure.
+### Policy, Assessment and Reliance
 
-## 4. Automatic theorem dependency closure
+Policies express purpose-scoped requirements. Assessments evaluate available evidence against those requirements.
 
-Existing Lean mathematics can grow the registry automatically.
+A **Reliance** record is created only through the explicit reconciliation path. It states that downstream work actually depends on a particular upstream revision for a particular purpose.
 
-For each imported theorem:
+This is why merely fetching a page never silently becomes durable reliance.
+
+### Watch, Evaluation and Alert
+
+A **Watch** monitors a Source for change. Evaluations compare the latest observation with the previously known revision and Alerts surface relevant changes.
+
+A detected change is evidence, not an automatic invalidation:
 
 ```text
-original theorem proof Expr
-  → direct constant refs
-  → resolve existing FormalBindings
-  → classify unbound constants with Lean ConstantInfo
-      ├─ .thmInfo → theorem Claim candidate
-      └─ other ConstantInfo / internal / missing → formal substrate
-  → batch-import theorem candidates
-  → repeat within explicit budgets
+changed != invalid
+stale != false
 ```
 
-The closure is deterministic and non-AI. Names and namespaces are navigation/display aids, not evidence that a constant is a theorem.
+### Lineage and affectedness
 
-Default web bounds:
+Lineage records structural downstream relationships. Affectedness adds the evidence and reasoning needed to decide whether a change may matter to a dependent artifact.
+
+The distinction is deliberate:
 
 ```text
-max_depth = 2
-max_claims = 160 per root batch
+lineage != affectedness verdict
 ```
 
-Hard implementation bounds prevent runaway recursive imports. Hitting a boundary returns `truncated=true`; MathHub never calls a bounded result a complete closure.
+## 2. Product flow
 
-Raw non-theorem constants remain available for formal inspection but never become ProofDependency Claim edges merely because they were referenced by Lean.
-
-## 5. Batch execution
-
-Mathematical identity remains per theorem, while expensive Lean process startup is shared.
-
-A bounded batch (currently at most 40 theorem roots) performs:
+The canonical flow is:
 
 ```text
-1 Lean process: inspect external declarations
-1 Lean process: compile/audit local bridge theorems
-N independent Claim / Proof / Build / FormalBinding records
+Source
+  -> Snapshot / SourceRevision
+  -> WorkSession
+  -> explicit reconciliation
+  -> Policy / Assessment
+  -> Reliance
+  -> Watch / Evaluation / Alert
+  -> lineage / affectedness
+  -> revalidation
 ```
 
-A fully duplicate batch is resolved from FormalBinding before Lean invocation and therefore costs zero Lean processes.
+Every user-facing surface should project this same model rather than inventing a second semantic layer.
 
-Automatic dependency closure composes this batch primitive recursively rather than introducing a second mathematical object type.
+## 3. Interfaces
 
-## 6. ArgumentIndex
+### CLI
 
-Active dependency truth is stored in ArgumentIndex.
+`testamur` is the primary local command-line entrypoint.
 
-### Immutable raw observations
+### Local Web
 
-`build_constant_refs` records:
+`testamur-web` exposes a local workspace over the same canonical stores and product-service boundary. The Web UI is a projection, not a second evidence engine.
 
-- statement constants;
-- proof constants;
-- transitive constants.
+### Source Gateway
 
-### Mathematical projection
+`testamur-gateway` and `testamur-gateway-mcp` expose exact-revision source access. Gateway access records what was fetched; durable reliance still requires explicit reconciliation.
 
-`proof_claim_dependencies` maps complete proof observations to exact registered Claim revisions through FormalBinding in the same environment.
+### Integrations
 
-Reconciliation is intentionally repeatable: an old immutable Build may gain a new mathematical interpretation when a previously unmapped Lean theorem later receives a FormalBinding. The old Build itself is not recompiled or mutated.
+Host-specific hooks, MCP wrappers and monitor providers live in `Constanteer/testamur-plugins`. Integrations remain thin adapters and do not own Testamur's semantic model.
 
-Legacy Claim-like definitions are filtered at reconciliation and never become new mathematical edges.
+## 4. Storage and identity
 
-## 7. Library discovery cache
+Testamur keeps durable object identity separate from presentation. Historical storage or wire identifiers may remain readable for compatibility, but new production code is owned by the `testamur` namespace.
 
-Large Lean namespaces are expensive to enumerate repeatedly, so MathHub maintains a disposable theorem-name read cache keyed by:
+Local state is controlled through `TESTAMUR_HOME` and `TESTAMUR_DB`. Raw retained source bytes, metadata and derived records are managed by Testamur-owned stores.
 
-```text
-environment_hash + imports fingerprint + namespace
-```
+## 5. Temporal semantics
 
-The first read enumerates `.thmInfo` constants from the pinned Lean Environment. Later searches use SQLite and launch no Lean process.
+Testamur distinguishes multiple notions of time, including when information was recorded, when it was available and when it was effective. These are not collapsed into one generic timestamp.
 
-The theorem-name index is not source of truth. It can be discarded and rebuilt from Lean at any time.
+See [the temporal model](docs/TESTAMUR_TEMPORAL_MODEL.md) for the detailed contract.
 
-## 8. Presentation layer
+## 6. Release boundary
 
-Presentation is separate from mathematical identity and verification.
+This repository ships the canonical `testamur*` Python package and Testamur-owned local entrypoints. Hosted authentication, billing, tenant isolation, managed scheduling and production deployment infrastructure are separate service-plane concerns.
 
-Canonical rendering priority is:
+The release gate enforces the package boundary and rejects reverse dependencies on retired runtime namespaces.
 
-```text
-Lean-pretty current renderer
-  > source-declaration current renderer
-  > older generated renderer
-```
-
-Successful complete audits may provide `ConstantInfo.type → ppExpr` as canonical presentation input. Unbuilt Claims use deterministic source-declaration fallback.
-
-Human curated presentations (`concise`, `textbook`, `intuitive`, `translation`) are append-only display records and do not alter Claim/Proof/dependency truth.
-
-Current deterministic surface representation is `surface-ir-v3`.
-
-## 9. Global graph read model
-
-The web graph is persistent rather than replace-on-recenter.
-
-Literal all-Claim detail is used only while both readability budgets hold:
-
-```text
-Claims ≤ 300
-projected edges ≤ 1500
-```
-
-Larger registries use hierarchical LOD:
-
-```text
-curated area
-  > imported external Lean namespace
-  > local Claim Lean namespace
-```
-
-Namespace clusters drill down recursively, and direct Claims are cursor-paged. Nodes persist on Canvas while a cluster's aggregate projection edges are replaced by progressively refined edges.
-
-This lets mathlib-scale registries preserve an Obsidian-like global-world feeling without downloading or drawing every theorem simultaneously.
-
-## 10. Provenance
-
-Claim revisions, Proofs, Builds, FormalBindings, raw constant observations and presentations are append-only or immutable where they represent evidence.
-
-Public object IDs are opaque stable identifiers. SQLite integer primary keys remain internal implementation details.
-
-MathHub's trust chain remains:
-
-```text
-Claim
-← Proof
-← Lean kernel verification
-← exact environment
-← proof-specific argument evidence
-```
-
-Presentation, graph layout, clustering and derived caches may improve navigation, but none of them become mathematical authority.
-
-## 11. Testamur / MathHub boundary
-
-MathHub remains a distinct mathematical product and ontology inside the current transition repository. Testamur provides generic provenance, source/revision, reliance, temporal, lineage and revalidation infrastructure; it is **not** a replacement for MathHub's mathematical model.
-
-In particular:
-
-- `Claim`, `Proof`, and `ProofDependency` remain MathHub-owned mathematical concepts;
-- `Proof` is not renamed to generic evidence;
-- `ProofDependency` remains proof-specific mathematical dependency evidence;
-- Lean remains the authority for formal verification;
-- Testamur verification/reliance state does not replace MathHub's exact Build/kernel state;
-- MathHub may consume or project into shared Testamur provenance infrastructure only through explicit boundaries;
-- Testamur core must not depend on MathHub as a hidden semantic engine.
-
-The intended ownership relationship is:
-
-```text
-Testamur core / provenance infrastructure
-            ↑ explicit adapter/projection
-        MathHub domain model
-            ↓
-Lean environment + kernel
-```
-
-The repository is transitional. The target split keeps public Testamur core/integrations and the MathHub product independently understandable, while any hosted account/billing/service-plane code lives outside the OSS semantic core.
-
-See `README.md`, `docs/MATHHUB_PRODUCT.md`, and `docs/TESTAMUR_COMPLETION_SPEC.md` for the current product/repository boundary.
+For executable checks, see [Quick launch](QUICK_LAUNCH.md).
