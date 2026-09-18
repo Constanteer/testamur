@@ -67,6 +67,18 @@ SourceRevision
 
 A source being fetched or shown to an agent is evidence of exposure, not automatically evidence of reliance. Likewise, an upstream change creates a reason to inspect downstream work; it does not automatically make that work invalid.
 
+## Software supply-chain import
+
+Scan a repository's dependency manifests and lockfiles into Testamur:
+
+```bash
+testamur project import .
+```
+
+The initial importer recognizes pinned Python requirements, `uv.lock`, `poetry.lock`, npm `package-lock.json` / `npm-shrinkwrap.json`, `Cargo.lock`, and `go.sum`. It records exact manifest digests, canonical package/component identities, dependency observations and durable project scan relations.
+
+A declared package version is preserved as declaration evidence; Testamur does not automatically treat a name/version match as an exact content match or vulnerability/affectedness verdict.
+
 ## Source Gateway
 
 Testamur includes a local Source Gateway for exact-revision source access.
