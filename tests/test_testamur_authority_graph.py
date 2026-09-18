@@ -6,6 +6,7 @@ from io import StringIO
 
 import pytest
 
+from testamur.authority_affectedness import affectedness_compromise_seeds
 from testamur.authority import (
     AuthorityEvidenceClass,
     AuthorityRelationType,
@@ -620,3 +621,108 @@ def test_authority_path_explanation_does_not_guess_wrong_target(tmp_path):
             [edge["edge_id"]],
             expected_target_ref="c",
         )
+
+
+def test_affectedness_never_automatically_becomes_compromise(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "runtime", AuthoritySubjectKind.WORKLOAD)
+    assessment = {
+        "assessment_id": "tst:affectedness:1",
+        "subject_revision": "revision:runtime:1",
+        "state": "CONFIRMED_AFFECTED",
+    }
+    binding = {
+        "subject_revision": "revision:runtime:1",
+        "authority_subject_ref": "runtime",
+        "binding_ref": "tst:binding:runtime:1",
+        "compromise_basis": [],
+    }
+
+    result = affectedness_compromise_seeds(
+        store,
+        [assessment],
+        [binding],
+        policy_ref="policy:remote-rce",
+        eligible_states=["CONFIRMED_AFFECTED"],
+    )
+
+    assert result["seed_refs"] == []
+    assert result["rejected"][0]["reasons"] == ["compromise_basis_required"]
+
+
+def test_affectedness_bridge_requires_explicit_policy_basis(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "runtime", AuthoritySubjectKind.WORKLOAD)
+    assessment = {
+        "assessment_id": "tst:affectedness:2",
+        "subject_revision": "revision:runtime:2",
+        "state": "CONFIRMED_AFFECTED",
+    }
+    binding = {
+        "subject_revision": "revision:runtime:2",
+        "authority_subject_ref": "runtime",
+        "binding_ref": "tst:binding:runtime:2",
+        "compromise_basis": [
+            {
+                "kind": "remote_exploitability",
+                "ref": "advisory:exploitability",
+                "evidence_class": "OBSERVED",
+            },
+            {
+                "kind": "exposure",
+                "ref": "runtime:internet-exposed",
+                "evidence_class": "DERIVED",
+                "analyzer": "deployment-inspector",
+                "analyzer_version": "1",
+            },
+        ],
+    }
+
+    result = affectedness_compromise_seeds(
+        store,
+        [assessment],
+        [binding],
+        policy_ref="policy:remote-rce",
+        eligible_states=["CONFIRMED_AFFECTED"],
+        required_basis_kinds=["remote_exploitability", "exposure"],
+    )
+
+    assert result["seed_refs"] == ["runtime"]
+    assert result["seeds"][0]["assessment_ids"] == ["tst:affectedness:2"]
+    assert result["seeds"][0]["policy_ref"] == "policy:remote-rce"
+
+
+def test_affectedness_bridge_rejects_declared_only_compromise_basis_by_default(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "runtime", AuthoritySubjectKind.WORKLOAD)
+    assessment = {
+        "assessment_id": "tst:affectedness:3",
+        "subject_revision": "revision:runtime:3",
+        "state": "CONFIRMED_AFFECTED",
+    }
+    binding = {
+        "subject_revision": "revision:runtime:3",
+        "authority_subject_ref": "runtime",
+        "binding_ref": "tst:binding:runtime:3",
+        "compromise_basis": [
+            {
+                "kind": "remote_exploitability",
+                "ref": "docs:claims-rce",
+                "evidence_class": "DECLARED",
+            }
+        ],
+    }
+
+    result = affectedness_compromise_seeds(
+        store,
+        [assessment],
+        [binding],
+        policy_ref="policy:remote-rce",
+        eligible_states=["CONFIRMED_AFFECTED"],
+        required_basis_kinds=["remote_exploitability"],
+    )
+
+    assert result["seed_refs"] == []
+    assert result["rejected"][0]["reasons"] == [
+        "declared_only_compromise_basis_not_accepted"
+    ]
