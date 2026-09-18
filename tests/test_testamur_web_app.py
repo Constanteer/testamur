@@ -96,6 +96,10 @@ class TestamurCanonicalWebTest(unittest.TestCase):
         self.assertIn("learnPage", app)
         self.assertIn("quickstartPage", app)
         self.assertIn("docsPage", app)
+        self.assertIn("integrationsPage", app)
+        self.assertIn("codex plugin marketplace add Constanteer/testamur-plugins", app)
+        self.assertIn("EXPOSED_TO_MODEL ≠ RELIED", app)
+        self.assertIn(".integration-grid", styles)
         self.assertIn("demoPage", app)
         self.assertIn("changed ≠ invalid", app)
         self.assertIn(".onboarding-card", styles)
@@ -159,7 +163,7 @@ class TestamurCanonicalWebTest(unittest.TestCase):
         self.assertIn("render();", navigate)
 
     def test_workspace_routes_serve_spa_and_unknown_static_path_does_not(self) -> None:
-        for path in ("/", "/projects", "/projects/new", "/projects/demo", "/explore", "/monitoring", "/learn", "/docs", "/quickstart", "/demo", "/status", "/object/tst%3Asource%3Aone"):
+        for path in ("/", "/projects", "/projects/new", "/projects/demo", "/explore", "/monitoring", "/learn", "/docs", "/integrations", "/quickstart", "/demo", "/status", "/object/tst%3Asource%3Aone"):
             with self.subTest(path=path):
                 response = dispatch_web_get(self.service, path)
                 self.assertEqual(response["status"], 200)
