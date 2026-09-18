@@ -60,6 +60,23 @@ The distinction is deliberate:
 lineage != affectedness verdict
 ```
 
+
+### Authority and capability
+
+Authority is a third graph family, orthogonal to material lineage and durable reliance. It records evidence-backed facts about what a principal, workload, credential, session, agent or connector can access, invoke, mutate or delegate.
+
+```text
+lineage != authority
+reliance != authority
+network reachability != authorization
+credential presence != credential usability
+reachable != exercised
+```
+
+The authority engine supports explicit compromise models and bounded reachability so Testamur can answer questions such as “if this workload is fully compromised, what authority can it reach and why?” without pretending an affected component is already compromised.
+
+Credential audience/scope/binding, connector delegation and trust-boundary crossings remain explicit evidence-bearing semantics. See [Authority / Capability Graph](docs/TESTAMUR_AUTHORITY_CAPABILITY_GRAPH.md).
+
 ## 2. Product flow
 
 The canonical flow is:
