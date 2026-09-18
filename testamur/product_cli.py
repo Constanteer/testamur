@@ -11,6 +11,7 @@ from .product_actions import create_monitor, create_project, refresh_monitor, re
 from .environment import DB_FILE_NAME, ENV_DIR_NAME, discover
 from .monitor_provider_manifest import load_monitor_provider_registry
 from .product_service import TestamurProductService
+from .supply_chain import import_project_supply_chain
 
 
 EXIT_OK = 0
@@ -45,6 +46,12 @@ def _parser() -> argparse.ArgumentParser:
     project_show.add_argument("ref")
     project_refresh = project_sub.add_parser("refresh")
     project_refresh.add_argument("ref")
+    project_import = project_sub.add_parser(
+        "import", help="scan dependency manifests/lockfiles and import a project supply chain"
+    )
+    project_import.add_argument("path", nargs="?", default=".")
+    project_import.add_argument("--name")
+    project_import.add_argument("--visibility", choices=("private", "public"), default="private")
 
     monitor = sub.add_parser("monitor")
     monitor_sub = monitor.add_subparsers(dest="monitor_command", required=True)
@@ -219,6 +226,13 @@ def dispatch(
                 payload = product.project(args.ref)
             elif args.project_command == "refresh":
                 payload = refresh_project_monitors(product, project_ref=args.ref)
+            elif args.project_command == "import":
+                payload = import_project_supply_chain(
+                    product,
+                    Path(args.path),
+                    project_name=args.name,
+                    visibility=args.visibility,
+                )
             else:
                 raise ValueError(f"unsupported project command: {args.project_command}")
         elif args.command == "monitor":
