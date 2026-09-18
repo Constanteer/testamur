@@ -17,6 +17,8 @@ from testamur.authority_reachability import (
     authority_blast_radius,
     authority_reachability,
 )
+from testamur.cli import main as cli_main
+from testamur.environment import initialize
 from testamur.product_cli import dispatch
 from testamur.product_service import TestamurProductService
 
@@ -517,3 +519,36 @@ def test_product_service_authority_missing_subject_is_not_guessed(tmp_path):
 
     assert payload["ok"] is False
     assert payload["error"]["code"] == "object_not_found"
+
+
+def test_public_cli_exposes_authority_reachability(tmp_path, monkeypatch, capsys):
+    env = initialize(tmp_path, name="authority-demo")
+    store = TestamurAuthorityStore(env.database_path)
+    subject(store, "worker", AuthoritySubjectKind.WORKLOAD)
+    subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
+    store.record_edge(
+        "worker",
+        AuthorityRelationType.CAN_READ,
+        "repo",
+        capabilities=[cap("github", "repo.read", "repo:demo")],
+        evidence=OBSERVED,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    code = cli_main(
+        [
+            "--json",
+            "authority",
+            "reach",
+            "worker",
+            "--model",
+            CompromiseModel.PROCESS_CODE_EXECUTION.value,
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["starting_subject_ref"] == "worker"
+    assert any(
+        item["capability"]["action"] == "repo.read"
+        for item in payload["actionable_capabilities"]
+    )
