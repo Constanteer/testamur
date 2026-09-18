@@ -72,6 +72,54 @@ def test_delegation_cannot_drop_binding_or_trust_context():
     )
 
 
+def test_constraint_aliases_are_semantic_not_authority_widening():
+    parent = cap(
+        "repo:a",
+        scopes=["contents:write", "metadata:read"],
+        audiences=["github-app", "github-api"],
+        service_refs=["svc:github"],
+    )
+    assert capability_is_attenuation(
+        cap(
+            "repo:a",
+            scope=["contents:write"],
+            audience=["github-app"],
+            service_ref="svc:github",
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(
+        cap(
+            "repo:a",
+            scope=["contents:write", "admin"],
+            audience=["github-app"],
+            service_ref="svc:github",
+        ),
+        parent,
+    )
+
+
+def test_plural_binding_aliases_cannot_be_dropped():
+    parent = cap(
+        "repo:a",
+        network_zones=["prod"],
+        source_ips=["10.0.0.8"],
+        device_bindings=["device:1"],
+        session_bindings=["session:1"],
+    )
+    assert capability_is_attenuation(
+        cap(
+            "repo:a",
+            network_zone="prod",
+            source_ip="10.0.0.8",
+            device_binding="device:1",
+            session_binding="session:1",
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(cap("repo:a", network_zone="prod"), parent)
+
+
 def test_expiry_attenuation_uses_timestamps_not_lexical_order():
     parent = cap("repo:a", expires_at="2026-09-18T12:00:00Z")
     # Same instant, different offset: valid attenuation.
