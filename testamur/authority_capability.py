@@ -8,6 +8,17 @@ from typing import Any, Mapping, Sequence
 
 CapabilityBudget = tuple[dict[str, Any], ...]
 
+# These relations describe graph connectivity or authority containers, not an
+# exercisable permission by themselves.  In particular CAN_CONNECT is deliberately
+# excluded from implicit capability synthesis: network/API reachability is not proof
+# of authorization.
+_NO_IMPLICIT_CAPABILITY_RELATIONS = frozenset({
+    "CAN_CONNECT",
+    "HAS_CAPABILITY",
+    "DELEGATES",
+    "ACCEPTS_CREDENTIAL",
+})
+
 
 def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
     raw = value.get("constraints")
@@ -90,6 +101,8 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
         ("source_ip", "source_ips"),
         ("device_binding", "device_bindings"),
         ("session_binding", "session_bindings"),
+        ("issuer", "issuers", "required_issuer", "required_issuers"),
+        ("tenant", "tenants", "tenant_id", "tenant_ids"),
     )
     gate_keys = {"approval_required", "human_confirmation_required", "mfa_required"}
     handled = {alias for group in set_aliases for alias in group} | gate_keys | {
@@ -158,16 +171,22 @@ def edge_capabilities(
     """Project only capabilities exercisable within an inherited delegation budget.
 
     Mere edge connectivity never manufactures a capability. Callers may provide an
-    explicit semantic capability for relation types whose meaning itself denotes an
-    action (for example CAN_READ); HAS_CAPABILITY/DELEGATES must carry their own
-    capability payloads.
+    explicit semantic capability only for relation types whose meaning itself denotes
+    an authorized action (for example CAN_READ/CAN_WRITE/CAN_EXECUTE). CAN_CONNECT is
+    intentionally not such a relation: connectivity is not authorization.
+    HAS_CAPABILITY and DELEGATES must always carry their own capability payloads.
     """
     raw = [
         dict(item)
         for item in edge.get("capabilities") or []
         if isinstance(item, Mapping)
     ]
-    if not raw and implicit_capability is not None:
+    relation = str(edge.get("relation_type") or "")
+    if (
+        not raw
+        and implicit_capability is not None
+        and relation not in _NO_IMPLICIT_CAPABILITY_RELATIONS
+    ):
         raw.append(dict(implicit_capability))
     return [item for item in raw if capability_allowed(item, budget)]
 
