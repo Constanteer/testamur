@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 
@@ -23,6 +24,23 @@ def _set(value: Any) -> set[str]:
     return {str(value)}
 
 
+def _parse_time(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _resource_within(child: str | None, parent: str | None, parent_pattern: str | None) -> bool:
     if parent_pattern:
         return child is not None and fnmatch.fnmatchcase(child, parent_pattern)
@@ -34,14 +52,18 @@ def _resource_within(child: str | None, parent: str | None, parent_pattern: str 
 def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any]) -> bool:
     """Return True only when child cannot exercise more authority than parent.
 
-    Unknown non-empty constraints fail closed: they must be preserved exactly. Known
-    set constraints may narrow; boolean gates may be added but never removed; expiry
-    may move earlier but never later. Resource patterns constrain concrete children.
+    This is deliberately fail-closed. Namespace/action must be identical. Set-valued
+    identity/scope constraints may narrow, boolean gates may be added but never
+    removed, expiry may move earlier but never later, and unknown non-empty provider
+    constraints must be preserved exactly. A parent resource pattern may be
+    instantiated to a matching concrete resource; pattern-to-pattern reasoning is not
+    guessed and therefore requires exact preservation.
     """
     if str(child.get("namespace") or "") != str(parent.get("namespace") or ""):
         return False
     if str(child.get("action") or "") != str(parent.get("action") or ""):
         return False
+
     pc = _constraints(parent)
     cc = _constraints(child)
     if not _resource_within(
@@ -51,9 +73,14 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     ):
         return False
 
-    set_keys = {"scope", "scopes", "audience", "audiences", "principal", "principals", "service_ref", "service_refs"}
+    set_keys = {
+        "scope", "scopes", "audience", "audiences", "principal", "principals",
+        "service_ref", "service_refs", "network_zone", "source_ip", "device_binding",
+        "session_binding",
+    }
     gate_keys = {"approval_required", "human_confirmation_required", "mfa_required"}
     handled = set_keys | gate_keys | {"resource_pattern", "expires_at"}
+
     for key in set_keys:
         parent_values = _set(pc.get(key))
         if not parent_values:
@@ -61,17 +88,24 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
         child_values = _set(cc.get(key))
         if not child_values or not child_values <= parent_values:
             return False
+
     for key in gate_keys:
         if pc.get(key) is True and cc.get(key) is not True:
             return False
+
     if pc.get("expires_at") is not None:
-        if cc.get("expires_at") is None or str(cc["expires_at"]) > str(pc["expires_at"]):
+        parent_expiry = _parse_time(pc.get("expires_at"))
+        child_expiry = _parse_time(cc.get("expires_at"))
+        # Invalid/unknown expiry cannot establish attenuation.
+        if parent_expiry is None or child_expiry is None or child_expiry > parent_expiry:
             return False
+
     if pc.get("resource_pattern") is not None:
         child_resource = child.get("resource")
         child_pattern = cc.get("resource_pattern")
         if child_resource is None and child_pattern != pc.get("resource_pattern"):
             return False
+
     for key, value in pc.items():
         if key in handled or value in (None, False, "", [], {}, ()):
             continue
@@ -86,13 +120,32 @@ def attenuate_budget(capabilities: Sequence[Mapping[str, Any]], inherited: Capab
     if inherited is None:
         result = candidates
     else:
-        result = [item for item in candidates if any(capability_is_attenuation(item, parent) for parent in inherited)]
+        result = [
+            item
+            for item in candidates
+            if any(capability_is_attenuation(item, parent) for parent in inherited)
+        ]
     result.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
     return tuple(result)
 
 
 def capability_allowed(capability: Mapping[str, Any], budget: CapabilityBudget | None) -> bool:
-    return budget is None or any(capability_is_attenuation(capability, parent) for parent in budget)
+    return budget is None or any(
+        capability_is_attenuation(capability, parent) for parent in budget
+    )
 
 
-__all__ = ["CapabilityBudget", "capability_is_attenuation", "attenuate_budget", "capability_allowed"]
+def project_budget(budget: CapabilityBudget | None) -> list[dict[str, Any]] | None:
+    """Stable JSON projection for reachability/CLI/ProductService/Web surfaces."""
+    if budget is None:
+        return None
+    return [dict(item) for item in budget]
+
+
+__all__ = [
+    "CapabilityBudget",
+    "capability_is_attenuation",
+    "attenuate_budget",
+    "capability_allowed",
+    "project_budget",
+]
