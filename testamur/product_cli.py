@@ -92,6 +92,12 @@ def _parser() -> argparse.ArgumentParser:
     authority_explain.add_argument("edge_ids", nargs="+")
     authority_explain.add_argument("--start", dest="starting_ref")
     authority_explain.add_argument("--target", dest="expected_target_ref")
+    authority_explain.add_argument(
+        "--support-edge",
+        action="append",
+        default=[],
+        dest="supporting_edge_ids",
+    )
 
     authority_reach = authority_sub.add_parser("reach")
     authority_reach.add_argument("ref")
@@ -309,6 +315,7 @@ def dispatch(
                     list(args.edge_ids),
                     starting_ref=args.starting_ref,
                     expected_target_ref=args.expected_target_ref,
+                    supporting_edge_ids=list(args.supporting_edge_ids),
                 )
             elif args.authority_command == "reach":
                 payload = product.authority_reach(
