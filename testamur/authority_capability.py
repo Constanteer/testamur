@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 CapabilityBudget = tuple[dict[str, Any], ...]
 
 # These relations describe graph connectivity or authority containers, not an
-# exercisable permission by themselves.  In particular CAN_CONNECT is deliberately
+# exercisable permission by themselves. In particular CAN_CONNECT is deliberately
 # excluded from implicit capability synthesis: network/API reachability is not proof
 # of authorization.
 _NO_IMPLICIT_CAPABILITY_RELATIONS = frozenset({
@@ -23,6 +23,24 @@ _NO_IMPLICIT_CAPABILITY_RELATIONS = frozenset({
 def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
     raw = value.get("constraints")
     return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def _well_formed(capability: Mapping[str, Any]) -> bool:
+    """Reject capability-shaped data that does not name an authority operation.
+
+    Provider payloads are untrusted observations. Missing namespace/action must never
+    become a wildcard or an empty capability that can survive delegation algebra.
+    Constraints, including unknown provider constraints, are intentionally allowed;
+    attenuation handles them fail-closed.
+    """
+    namespace = capability.get("namespace")
+    action = capability.get("action")
+    return (
+        isinstance(namespace, str)
+        and bool(namespace.strip())
+        and isinstance(action, str)
+        and bool(action.strip())
+    )
 
 
 def _set(value: Any) -> set[str]:
@@ -78,6 +96,8 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     instantiated to a matching concrete resource; pattern-to-pattern reasoning is not
     guessed and therefore requires exact preservation.
     """
+    if not _well_formed(child) or not _well_formed(parent):
+        return False
     if str(child.get("namespace") or "") != str(parent.get("namespace") or ""):
         return False
     if str(child.get("action") or "") != str(parent.get("action") or ""):
@@ -143,20 +163,23 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
 
 def attenuate_budget(capabilities: Sequence[Mapping[str, Any]], inherited: CapabilityBudget | None) -> CapabilityBudget:
     """Intersect a delegated capability set with its inherited authority budget."""
-    candidates = [dict(item) for item in capabilities]
+    candidates = [dict(item) for item in capabilities if _well_formed(item)]
     if inherited is None:
         result = candidates
     else:
+        valid_inherited = tuple(item for item in inherited if _well_formed(item))
         result = [
             item
             for item in candidates
-            if any(capability_is_attenuation(item, parent) for parent in inherited)
+            if any(capability_is_attenuation(item, parent) for parent in valid_inherited)
         ]
     result.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
     return tuple(result)
 
 
 def capability_allowed(capability: Mapping[str, Any], budget: CapabilityBudget | None) -> bool:
+    if not _well_formed(capability):
+        return False
     return budget is None or any(
         capability_is_attenuation(capability, parent) for parent in budget
     )
@@ -179,12 +202,13 @@ def edge_capabilities(
     raw = [
         dict(item)
         for item in edge.get("capabilities") or []
-        if isinstance(item, Mapping)
+        if isinstance(item, Mapping) and _well_formed(item)
     ]
     relation = str(edge.get("relation_type") or "")
     if (
         not raw
         and implicit_capability is not None
+        and _well_formed(implicit_capability)
         and relation not in _NO_IMPLICIT_CAPABILITY_RELATIONS
     ):
         raw.append(dict(implicit_capability))
@@ -199,15 +223,16 @@ def delegation_budget(
 ) -> CapabilityBudget | None:
     """Return the effective downstream budget for an authority edge.
 
-    A DELEGATES edge with no explicit capabilities is intentionally an empty budget,
-    never unrestricted authority. Non-delegation edges with no capability payload
-    preserve the inherited budget. When capabilities are present they must attenuate
-    the inherited budget including all constraints, not only namespace/action/resource.
+    A DELEGATES edge with no explicit, well-formed capabilities is intentionally an
+    empty budget, never unrestricted authority. Non-delegation edges with no valid
+    capability payload preserve the inherited budget. When capabilities are present
+    they must attenuate the inherited budget including all constraints, not only
+    namespace/action/resource.
     """
     capabilities = [
         dict(item)
         for item in edge.get("capabilities") or []
-        if isinstance(item, Mapping)
+        if isinstance(item, Mapping) and _well_formed(item)
     ]
     if not capabilities:
         return () if str(edge.get("relation_type") or "") == delegation_relation else inherited
@@ -218,7 +243,7 @@ def project_budget(budget: CapabilityBudget | None) -> list[dict[str, Any]] | No
     """Stable JSON projection for reachability/CLI/ProductService/Web surfaces."""
     if budget is None:
         return None
-    return [dict(item) for item in budget]
+    return [dict(item) for item in budget if _well_formed(item)]
 
 
 __all__ = [
