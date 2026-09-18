@@ -79,6 +79,7 @@ The public Testamur core owns semantic truth about local evidence operations. It
 - Policy and Reliance;
 - WorkSession and explicit reconciliation;
 - lineage / affectedness primitives;
+- authority / capability graph and compromise-reachability primitives;
 - watch/change/revalidation semantics;
 - canonical `TestamurProductService` read boundary;
 - local protocol/types needed by integrations;
@@ -375,6 +376,10 @@ The following remain non-negotiable:
 - changed != invalid;
 - stale != false;
 - lineage != affectedness verdict;
+- lineage != authority;
+- reliance != authority;
+- credential presence != credential usability;
+- reachable authority != exercised authority;
 - upload != publication rights;
 - hosted != trusted;
 - paid != verified;
@@ -426,6 +431,7 @@ The OSS core is ready to extract/publish when:
 - [ ] legacy persisted data compatibility is explicit and tested;
 - [ ] CLI install/run works from a fresh installation;
 - [ ] ProductService/Web semantic boundary tests pass;
+- [ ] authority graph traversal is bounded, evidence-backed and preserves credential/delegation constraints;
 - [ ] release gate passes on the exact candidate head;
 - [ ] repository split destination is clear;
 - [ ] an open-source license has been selected before public release.
