@@ -8,10 +8,6 @@ from typing import Any, Mapping, Sequence
 
 CapabilityBudget = tuple[dict[str, Any], ...]
 
-# These relations describe graph connectivity or authority containers, not an
-# exercisable permission by themselves. In particular CAN_CONNECT is deliberately
-# excluded from implicit capability synthesis: network/API reachability is not proof
-# of authorization.
 _NO_IMPLICIT_CAPABILITY_RELATIONS = frozenset({
     "CAN_CONNECT",
     "HAS_CAPABILITY",
@@ -25,22 +21,59 @@ def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
     return dict(raw) if isinstance(raw, Mapping) else {}
 
 
-def _well_formed(capability: Mapping[str, Any]) -> bool:
-    """Reject capability-shaped data that does not name an authority operation.
+def _parse_time(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
-    Provider payloads are untrusted observations. Missing namespace/action must never
-    become a wildcard or an empty capability that can survive delegation algebra.
-    Constraints, including unknown provider constraints, are intentionally allowed;
-    attenuation handles them fail-closed.
+
+def _well_formed(capability: Mapping[str, Any]) -> bool:
+    """Reject malformed authority observations instead of treating them as wildcards.
+
+    This guard is intentionally repeated at the algebra boundary even though provider
+    importers validate their payloads. Authority edges can also be constructed by
+    local callers/tests/migrations, so reachability must not depend on importer hygiene.
     """
     namespace = capability.get("namespace")
     action = capability.get("action")
-    return (
+    if not (
         isinstance(namespace, str)
         and bool(namespace.strip())
         and isinstance(action, str)
         and bool(action.strip())
-    )
+    ):
+        return False
+
+    if "resource" in capability:
+        resource = capability.get("resource")
+        if resource is not None and (not isinstance(resource, str) or not resource.strip()):
+            return False
+
+    raw_constraints = capability.get("constraints")
+    if raw_constraints is not None and not isinstance(raw_constraints, Mapping):
+        return False
+    constraints = _constraints(capability)
+
+    # Time-bounded authority with an invalid timestamp is not unbounded authority.
+    if "expires_at" in constraints and _parse_time(constraints.get("expires_at")) is None:
+        return False
+
+    for key in ("approval_required", "human_confirmation_required", "mfa_required"):
+        if key in constraints and not isinstance(constraints[key], bool):
+            return False
+
+    return True
 
 
 def _set(value: Any) -> set[str]:
@@ -54,28 +87,10 @@ def _set(value: Any) -> set[str]:
 
 
 def _constraint_set(constraints: Mapping[str, Any], *aliases: str) -> set[str]:
-    """Read synonymous set-valued constraints without treating spelling as authority."""
     result: set[str] = set()
     for key in aliases:
         result.update(_set(constraints.get(key)))
     return result
-
-
-def _parse_time(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def _resource_within(child: str | None, parent: str | None, parent_pattern: str | None) -> bool:
@@ -87,15 +102,7 @@ def _resource_within(child: str | None, parent: str | None, parent_pattern: str 
 
 
 def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any]) -> bool:
-    """Return True only when child cannot exercise more authority than parent.
-
-    This is deliberately fail-closed. Namespace/action must be identical. Set-valued
-    identity/scope constraints may narrow, boolean gates may be added but never
-    removed, expiry may move earlier but never later, and unknown non-empty provider
-    constraints must be preserved exactly. A parent resource pattern may be
-    instantiated to a matching concrete resource; pattern-to-pattern reasoning is not
-    guessed and therefore requires exact preservation.
-    """
+    """Return True only when child cannot exercise more authority than parent."""
     if not _well_formed(child) or not _well_formed(parent):
         return False
     if str(child.get("namespace") or "") != str(parent.get("namespace") or ""):
@@ -162,7 +169,6 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
 
 
 def attenuate_budget(capabilities: Sequence[Mapping[str, Any]], inherited: CapabilityBudget | None) -> CapabilityBudget:
-    """Intersect a delegated capability set with its inherited authority budget."""
     candidates = [dict(item) for item in capabilities if _well_formed(item)]
     if inherited is None:
         result = candidates
@@ -191,14 +197,7 @@ def edge_capabilities(
     budget: CapabilityBudget | None,
     implicit_capability: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Project only capabilities exercisable within an inherited delegation budget.
-
-    Mere edge connectivity never manufactures a capability. Callers may provide an
-    explicit semantic capability only for relation types whose meaning itself denotes
-    an authorized action (for example CAN_READ/CAN_WRITE/CAN_EXECUTE). CAN_CONNECT is
-    intentionally not such a relation: connectivity is not authorization.
-    HAS_CAPABILITY and DELEGATES must always carry their own capability payloads.
-    """
+    """Project only capabilities exercisable within an inherited delegation budget."""
     raw = [
         dict(item)
         for item in edge.get("capabilities") or []
@@ -221,14 +220,7 @@ def delegation_budget(
     *,
     delegation_relation: str = "DELEGATES",
 ) -> CapabilityBudget | None:
-    """Return the effective downstream budget for an authority edge.
-
-    A DELEGATES edge with no explicit, well-formed capabilities is intentionally an
-    empty budget, never unrestricted authority. Non-delegation edges with no valid
-    capability payload preserve the inherited budget. When capabilities are present
-    they must attenuate the inherited budget including all constraints, not only
-    namespace/action/resource.
-    """
+    """Return the effective downstream budget for an authority edge."""
     capabilities = [
         dict(item)
         for item in edge.get("capabilities") or []
@@ -240,7 +232,6 @@ def delegation_budget(
 
 
 def project_budget(budget: CapabilityBudget | None) -> list[dict[str, Any]] | None:
-    """Stable JSON projection for reachability/CLI/ProductService/Web surfaces."""
     if budget is None:
         return None
     return [dict(item) for item in budget if _well_formed(item)]
