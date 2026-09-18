@@ -40,6 +40,12 @@ def _time(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _at_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def credential_constraints_satisfied(
     attributes: Mapping[str, Any],
     constraints: Mapping[str, Any],
@@ -55,6 +61,7 @@ def credential_constraints_satisfied(
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
+    at = _at_utc(as_of)
 
     revoked = constraints.get("revoked")
     revocation_state = str(
@@ -65,15 +72,34 @@ def credential_constraints_satisfied(
     if revoked is True or revocation_state in {"revoked", "invalid", "disabled"}:
         reasons.add("credential_or_edge_revoked")
 
+    # Provider observations frequently expose an explicit active/disabled bit.
+    # Only an explicit False blocks; absence is not silently interpreted as proof
+    # of validity because the authority edge itself remains the authorization fact.
+    if constraints.get("active") is False or attributes.get("active") is False:
+        reasons.add("credential_or_edge_inactive")
+
     expiry_raw = constraints.get("expires_at") or attributes.get("expires_at")
     if expiry_raw is not None:
         expiry = _time(expiry_raw)
         if expiry is None:
             unresolved.add("expires_at")
-        else:
-            at = as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=timezone.utc)
-            if expiry <= at.astimezone(timezone.utc):
-                reasons.add("credential_or_edge_expired")
+        elif expiry <= at:
+            reasons.add("credential_or_edge_expired")
+
+    # nbf/not_before is a validity boundary, not lineage. A credential observed
+    # before that instant exists, but is not yet exercisable authority.
+    not_before_raw = (
+        constraints.get("not_before")
+        or constraints.get("nbf")
+        or attributes.get("not_before")
+        or attributes.get("nbf")
+    )
+    if not_before_raw is not None:
+        not_before = _time(not_before_raw)
+        if not_before is None:
+            unresolved.add("not_before")
+        elif at < not_before:
+            reasons.add("credential_or_edge_not_yet_valid")
 
     families = (
         (("audience", "audiences", "required_audience", "required_audiences"), ("audience", "audiences"), "audience", False),
@@ -82,7 +108,7 @@ def credential_constraints_satisfied(
         (("tenant", "tenants", "tenant_id", "tenant_ids"), ("tenant", "tenants", "tenant_id", "tenant_ids"), "tenant", False),
     )
     handled: set[str] = {
-        "revoked", "revocation_state", "expires_at",
+        "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
         "approval_required", "human_confirmation_required", "mfa_required",
         "resource", "resource_pattern", "principal", "principals",
         "service_ref", "service_refs",
