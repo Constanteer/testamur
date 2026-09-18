@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence, TextIO
 
+from .authority_reachability import CompromiseModel
 from .contracts import error_envelope
 from .product_actions import create_monitor, create_project, refresh_monitor, refresh_project_monitors, run_due_monitors
 from .environment import DB_FILE_NAME, ENV_DIR_NAME, discover
@@ -77,6 +78,39 @@ def _parser() -> argparse.ArgumentParser:
 
     impact = sub.add_parser("impact")
     impact.add_argument("ref")
+
+    authority = sub.add_parser(
+        "authority",
+        help="inspect evidence-backed authority/capability reachability",
+    )
+    authority_sub = authority.add_subparsers(dest="authority_command", required=True)
+
+    authority_show = authority_sub.add_parser("show")
+    authority_show.add_argument("ref")
+
+    authority_reach = authority_sub.add_parser("reach")
+    authority_reach.add_argument("ref")
+    authority_reach.add_argument(
+        "--model",
+        required=True,
+        choices=tuple(item.value for item in CompromiseModel),
+    )
+    authority_reach.add_argument("--max-depth", type=int, default=8)
+    authority_reach.add_argument("--max-paths", type=int, default=256)
+    authority_reach.add_argument("--expansion-budget", type=int, default=10000)
+    authority_reach.add_argument("--as-of")
+
+    authority_blast = authority_sub.add_parser("blast-radius")
+    authority_blast.add_argument("refs", nargs="+")
+    authority_blast.add_argument(
+        "--model",
+        required=True,
+        choices=tuple(item.value for item in CompromiseModel),
+    )
+    authority_blast.add_argument("--max-depth", type=int, default=8)
+    authority_blast.add_argument("--max-paths", type=int, default=256)
+    authority_blast.add_argument("--expansion-budget", type=int, default=10000)
+    authority_blast.add_argument("--as-of")
 
     temporal = sub.add_parser("temporal")
     temporal.add_argument("ref")
@@ -262,6 +296,31 @@ def dispatch(
             payload = product.compare(args.left_ref, args.right_ref)
         elif args.command == "impact":
             payload = product.impact(args.ref)
+        elif args.command == "authority":
+            if args.authority_command == "show":
+                payload = product.authority_subject(args.ref)
+            elif args.authority_command == "reach":
+                payload = product.authority_reach(
+                    args.ref,
+                    compromise_model=args.model,
+                    max_depth=args.max_depth,
+                    max_paths=args.max_paths,
+                    expansion_budget=args.expansion_budget,
+                    as_of=args.as_of,
+                )
+            elif args.authority_command == "blast-radius":
+                payload = product.authority_blast(
+                    list(args.refs),
+                    compromise_model=args.model,
+                    max_depth=args.max_depth,
+                    max_paths=args.max_paths,
+                    expansion_budget=args.expansion_budget,
+                    as_of=args.as_of,
+                )
+            else:  # pragma: no cover - argparse owns nested command validation.
+                raise ValueError(
+                    f"unsupported authority command: {args.authority_command}"
+                )
         elif args.command == "temporal":
             payload = product.temporal(
                 args.ref,
