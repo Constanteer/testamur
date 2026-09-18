@@ -88,8 +88,8 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
         return False
 
     set_aliases = (
-        ("scope", "scopes"),
-        ("audience", "audiences"),
+        ("scope", "scopes", "required_scope", "required_scopes"),
+        ("audience", "audiences", "required_audience", "required_audiences"),
         ("principal", "principals"),
         ("service_ref", "service_refs"),
         ("network_zone", "network_zones"),
