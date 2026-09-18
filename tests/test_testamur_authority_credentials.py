@@ -66,6 +66,33 @@ def test_expired_or_malformed_expiry_is_not_valid_authority():
     assert not ok and reasons == [] and unresolved == ["expires_at"]
 
 
+def test_not_before_and_nbf_block_use_before_activation():
+    ok, reasons, unresolved = credential_constraints_satisfied(
+        {"nbf": "2026-09-20T00:00:00Z"}, {}, as_of=NOW
+    )
+    assert not ok
+    assert reasons == ["credential_or_edge_not_yet_valid"]
+    assert unresolved == []
+
+    ok, reasons, unresolved = credential_constraints_satisfied(
+        {}, {"not_before": "not-a-time"}, as_of=NOW
+    )
+    assert not ok
+    assert reasons == []
+    assert unresolved == ["not_before"]
+
+
+def test_explicit_inactive_state_blocks_credential_without_inferring_missing_state():
+    assert credential_constraints_satisfied({}, {}, as_of=NOW) == (True, [], [])
+
+    ok, reasons, unresolved = credential_constraints_satisfied(
+        {"active": False}, {}, as_of=NOW
+    )
+    assert not ok
+    assert reasons == ["credential_or_edge_inactive"]
+    assert unresolved == []
+
+
 def test_metadata_match_does_not_create_or_claim_authority():
     # The evaluator deliberately has no graph/store argument and returns only a
     # constraint verdict. Matching token metadata is evidence about an explicit
