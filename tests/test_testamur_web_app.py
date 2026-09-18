@@ -95,6 +95,7 @@ class TestamurCanonicalWebTest(unittest.TestCase):
         self.assertIn("helpNav", app)
         self.assertIn("learnPage", app)
         self.assertIn("quickstartPage", app)
+        self.assertIn("docsPage", app)
         self.assertIn("demoPage", app)
         self.assertIn("changed ≠ invalid", app)
         self.assertIn(".onboarding-card", styles)
@@ -137,7 +138,7 @@ class TestamurCanonicalWebTest(unittest.TestCase):
         self.assertIn("render();", navigate)
 
     def test_workspace_routes_serve_spa_and_unknown_static_path_does_not(self) -> None:
-        for path in ("/", "/projects", "/projects/new", "/projects/demo", "/explore", "/monitoring", "/learn", "/quickstart", "/demo", "/status", "/object/tst%3Asource%3Aone"):
+        for path in ("/", "/projects", "/projects/new", "/projects/demo", "/explore", "/monitoring", "/learn", "/docs", "/quickstart", "/demo", "/status", "/object/tst%3Asource%3Aone"):
             with self.subTest(path=path):
                 response = dispatch_web_get(self.service, path)
                 self.assertEqual(response["status"], 200)
