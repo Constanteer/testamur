@@ -24,6 +24,20 @@ def _set(value: Any) -> set[str]:
     return {str(value)}
 
 
+def _constraint_set(constraints: Mapping[str, Any], *aliases: str) -> set[str]:
+    """Read synonymous set-valued constraints without treating spelling as authority.
+
+    Providers commonly project `scope` vs `scopes` and `audience` vs `audiences`.
+    They are semantic aliases, not independent gates. If more than one spelling is
+    present we conservatively union the values; attenuation still requires the child
+    set to be a non-empty subset of the parent's effective set.
+    """
+    result: set[str] = set()
+    for key in aliases:
+        result.update(_set(constraints.get(key)))
+    return result
+
+
 def _parse_time(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -73,19 +87,26 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     ):
         return False
 
-    set_keys = {
-        "scope", "scopes", "audience", "audiences", "principal", "principals",
-        "service_ref", "service_refs", "network_zone", "source_ip", "device_binding",
-        "session_binding",
-    }
+    set_aliases = (
+        ("scope", "scopes"),
+        ("audience", "audiences"),
+        ("principal", "principals"),
+        ("service_ref", "service_refs"),
+        ("network_zone", "network_zones"),
+        ("source_ip", "source_ips"),
+        ("device_binding", "device_bindings"),
+        ("session_binding", "session_bindings"),
+    )
     gate_keys = {"approval_required", "human_confirmation_required", "mfa_required"}
-    handled = set_keys | gate_keys | {"resource_pattern", "expires_at"}
+    handled = {alias for group in set_aliases for alias in group} | gate_keys | {
+        "resource_pattern", "expires_at"
+    }
 
-    for key in set_keys:
-        parent_values = _set(pc.get(key))
+    for aliases in set_aliases:
+        parent_values = _constraint_set(pc, *aliases)
         if not parent_values:
             continue
-        child_values = _set(cc.get(key))
+        child_values = _constraint_set(cc, *aliases)
         if not child_values or not child_values <= parent_values:
             return False
 
