@@ -19,6 +19,7 @@ from testamur.authority_reachability import (
     authority_blast_radius,
     authority_reachability,
 )
+from testamur.authority_reliance import authority_reliance_impact
 from testamur.cli import main as cli_main
 from testamur.environment import initialize
 from testamur.product_cli import dispatch
@@ -726,3 +727,128 @@ def test_affectedness_bridge_rejects_declared_only_compromise_basis_by_default(t
     assert result["rejected"][0]["reasons"] == [
         "declared_only_compromise_basis_not_accepted"
     ]
+
+
+class FakeRelianceStore:
+    def __init__(self, receipts):
+        self.receipts = list(receipts)
+
+    def list(self, *, scope_ref, reliant_ref=None, object_ref=None):
+        values = [
+            item
+            for item in self.receipts
+            if item["scope_ref"] == scope_ref
+        ]
+        if reliant_ref is not None:
+            values = [item for item in values if item["reliant_ref"] == reliant_ref]
+        if object_ref is not None:
+            values = [item for item in values if item["object_ref"] == object_ref]
+        return values
+
+
+def test_authority_reliance_bridge_requires_explicit_resource_binding(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "connector", AuthoritySubjectKind.CONNECTOR)
+    subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
+    store.record_edge(
+        "connector",
+        AuthorityRelationType.HAS_CAPABILITY,
+        "repo",
+        capabilities=[cap("github", "repo.read", "repo:demo")],
+        evidence=OBSERVED,
+    )
+    authority = authority_reachability(
+        store,
+        "connector",
+        compromise_model=CompromiseModel.CONNECTOR_TAKEOVER,
+    )
+    reliance = FakeRelianceStore(
+        [
+            {
+                "scope_ref": "scope:demo",
+                "receipt_id": "receipt:1",
+                "reliant_ref": "artifact:downstream",
+                "reliant_revision_ref": "revision:downstream:1",
+                "object_ref": "source:repo",
+                "pinned_revisions": {"source:repo": "revision:repo:1"},
+            }
+        ]
+    )
+
+    result = authority_reliance_impact(
+        authority,
+        reliance,
+        scope_ref="scope:demo",
+        bindings=[],
+    )
+
+    assert result["impact_count"] == 0
+    assert result["unmatched_actions"][0]["reason"] == (
+        "no_explicit_authority_to_reliance_binding"
+    )
+
+
+def test_authority_reliance_bridge_matches_actual_durable_reliance(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "connector", AuthoritySubjectKind.CONNECTOR)
+    subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
+    store.record_edge(
+        "connector",
+        AuthorityRelationType.HAS_CAPABILITY,
+        "repo",
+        capabilities=[cap("github", "repo.read", "repo:demo")],
+        evidence=OBSERVED,
+    )
+    authority = authority_reachability(
+        store,
+        "connector",
+        compromise_model=CompromiseModel.CONNECTOR_TAKEOVER,
+    )
+    reliance = FakeRelianceStore(
+        [
+            {
+                "scope_ref": "scope:demo",
+                "receipt_id": "receipt:1",
+                "reliant_ref": "artifact:downstream",
+                "reliant_revision_ref": "revision:downstream:1",
+                "object_ref": "source:repo",
+                "pinned_revisions": {"source:repo": "revision:repo:1"},
+            },
+            {
+                "scope_ref": "scope:demo",
+                "receipt_id": "receipt:2",
+                "reliant_ref": "artifact:other",
+                "reliant_revision_ref": "revision:other:1",
+                "object_ref": "source:other",
+                "pinned_revisions": {"source:other": "revision:other-source:1"},
+            },
+        ]
+    )
+
+    result = authority_reliance_impact(
+        authority,
+        reliance,
+        scope_ref="scope:demo",
+        bindings=[
+            {
+                "authority_target_ref": "repo",
+                "binding_ref": "binding:repo",
+                "object_ref": "source:repo",
+                "revision_ref": "revision:repo:1",
+                "evidence": [
+                    {
+                        "ref": "inventory:repo-binding",
+                        "evidence_class": "OBSERVED",
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert result["impact_count"] == 1
+    assert result["affected_reliant_refs"] == ["artifact:downstream"]
+    impact = result["impacts"][0]
+    assert impact["receipt_id"] == "receipt:1"
+    assert impact["object_match"] is True
+    assert impact["revision_match"] is True
+    assert impact["review_required"] is True
