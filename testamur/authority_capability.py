@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import fnmatch
+import json
+from typing import Any, Mapping, Sequence
+
+
+CapabilityBudget = tuple[dict[str, Any], ...]
+
+
+def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
+    raw = value.get("constraints")
+    return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def _set(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {value} if value else set()
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        return {str(item) for item in value if str(item)}
+    return {str(value)}
+
+
+def _resource_within(child: str | None, parent: str | None, parent_pattern: str | None) -> bool:
+    if parent_pattern:
+        return child is not None and fnmatch.fnmatchcase(child, parent_pattern)
+    if parent is None:
+        return True
+    return child == parent
+
+
+def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any]) -> bool:
+    """Return True only when child cannot exercise more authority than parent.
+
+    Unknown non-empty constraints fail closed: they must be preserved exactly. Known
+    set constraints may narrow; boolean gates may be added but never removed; expiry
+    may move earlier but never later. Resource patterns constrain concrete children.
+    """
+    if str(child.get("namespace") or "") != str(parent.get("namespace") or ""):
+        return False
+    if str(child.get("action") or "") != str(parent.get("action") or ""):
+        return False
+    pc = _constraints(parent)
+    cc = _constraints(child)
+    if not _resource_within(
+        None if child.get("resource") is None else str(child.get("resource")),
+        None if parent.get("resource") is None else str(parent.get("resource")),
+        None if pc.get("resource_pattern") is None else str(pc.get("resource_pattern")),
+    ):
+        return False
+
+    set_keys = {"scope", "scopes", "audience", "audiences", "principal", "principals", "service_ref", "service_refs"}
+    gate_keys = {"approval_required", "human_confirmation_required", "mfa_required"}
+    handled = set_keys | gate_keys | {"resource_pattern", "expires_at"}
+    for key in set_keys:
+        parent_values = _set(pc.get(key))
+        if not parent_values:
+            continue
+        child_values = _set(cc.get(key))
+        if not child_values or not child_values <= parent_values:
+            return False
+    for key in gate_keys:
+        if pc.get(key) is True and cc.get(key) is not True:
+            return False
+    if pc.get("expires_at") is not None:
+        if cc.get("expires_at") is None or str(cc["expires_at"]) > str(pc["expires_at"]):
+            return False
+    if pc.get("resource_pattern") is not None:
+        child_resource = child.get("resource")
+        child_pattern = cc.get("resource_pattern")
+        if child_resource is None and child_pattern != pc.get("resource_pattern"):
+            return False
+    for key, value in pc.items():
+        if key in handled or value in (None, False, "", [], {}, ()):
+            continue
+        if key not in cc or cc[key] != value:
+            return False
+    return True
+
+
+def attenuate_budget(capabilities: Sequence[Mapping[str, Any]], inherited: CapabilityBudget | None) -> CapabilityBudget:
+    """Intersect a delegated capability set with its inherited authority budget."""
+    candidates = [dict(item) for item in capabilities]
+    if inherited is None:
+        result = candidates
+    else:
+        result = [item for item in candidates if any(capability_is_attenuation(item, parent) for parent in inherited)]
+    result.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+    return tuple(result)
+
+
+def capability_allowed(capability: Mapping[str, Any], budget: CapabilityBudget | None) -> bool:
+    return budget is None or any(capability_is_attenuation(capability, parent) for parent in budget)
+
+
+__all__ = ["CapabilityBudget", "capability_is_attenuation", "attenuate_budget", "capability_allowed"]
