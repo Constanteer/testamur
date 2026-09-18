@@ -974,3 +974,25 @@ body.modal-open { overflow: hidden; }
   .integration-note { grid-template-columns: 1fr; }
   .integrations-hero { padding: 18px; }
 }
+
+
+/* Integration discovery at decision points */
+.provider-discovery,.environment-integration-strip {
+  display: flex; justify-content: space-between; gap: 16px; align-items: center;
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--soft);
+}
+.provider-discovery > div,.environment-integration-strip > div { min-width: 0; }
+.provider-discovery strong,.provider-discovery span,.environment-integration-strip strong,.environment-integration-strip small { display: block; }
+.provider-discovery strong,.environment-integration-strip strong { font-size: 10px; }
+.provider-discovery span,.environment-integration-strip small { margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.provider-discovery > a:not(.btn) { flex: 0 0 auto; font-size: 10px; font-weight: 600; }
+.provider-discovery.provider-ready,.environment-integration-strip.ready { border-color: #aceebb; background: #f4fbf6; }
+.environment-integration-strip { margin: 0 0 16px; padding: 13px 14px; background: var(--canvas); }
+.environment-integration-strip .onboarding-kicker { margin-bottom: 3px; }
+.quickstart-optional { background: #fbfcfd; }
+.quickstart-optional .quickstart-number { border: 1px dashed var(--line); background: var(--canvas); }
+
+@media (max-width: 640px) {
+  .provider-discovery,.environment-integration-strip { align-items: flex-start; flex-direction: column; }
+}
