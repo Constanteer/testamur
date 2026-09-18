@@ -42,6 +42,7 @@ required_tests=(
   tests/test_testamur_release_e2e_worksession_reliance.py
   tests/test_testamur_release_e2e_affectedness.py
   tests/test_testamur_release_e2e_lineage_affectedness.py
+  tests/test_testamur_authority_graph.py
   tests/test_testamur_release_gate.py
   tests/test_testamur_namespace_dependency_guard.py
   tests/test_testamur_production_namespace_gate.py
