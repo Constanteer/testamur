@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "testamur"
+version = "0.3.0.dev0"
+description = "A local evidence environment for inspectable work"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [{name = "Constanteer"}]
+dependencies = []
+
+[project.scripts]
+testamur = "testamur.front_router:main"
+testamur-web = "testamur.web_app:main"
+testamur-gateway = "testamur.source_gateway_cli:main"
+testamur-gateway-mcp = "testamur.source_gateway_mcp:main"
+testamur-codex-hook = "testamur.codex_gateway_hook:main"
+
+[tool.setuptools.packages.find]
+include = ["testamur*"]
+
+[tool.setuptools.package-data]
+testamur = ["web/*.html", "web/*.css", "web/*.js"]
