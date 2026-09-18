@@ -12,6 +12,7 @@ from testamur.authority import (
     AuthoritySubjectKind,
     TestamurAuthorityStore,
 )
+from testamur.authority_explain import explain_authority_path
 from testamur.authority_reachability import (
     CompromiseModel,
     authority_blast_radius,
@@ -552,3 +553,70 @@ def test_public_cli_exposes_authority_reachability(tmp_path, monkeypatch, capsys
         item["capability"]["action"] == "repo.read"
         for item in payload["actionable_capabilities"]
     )
+
+
+def test_authority_path_explanation_requires_exact_contiguity(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    for ref, kind in (
+        ("worker", AuthoritySubjectKind.WORKLOAD),
+        ("token", AuthoritySubjectKind.TOKEN),
+        ("session", AuthoritySubjectKind.SESSION),
+        ("other", AuthoritySubjectKind.PROCESS),
+    ):
+        subject(store, ref, kind)
+
+    first = store.record_edge(
+        "worker",
+        AuthorityRelationType.EXPOSES,
+        "token",
+        evidence=OBSERVED,
+        boundary_refs=["boundary:one"],
+    )
+    second = store.record_edge(
+        "token",
+        AuthorityRelationType.CAN_AUTHENTICATE_AS,
+        "session",
+        evidence=OBSERVED,
+        boundary_refs=["boundary:two"],
+    )
+    unrelated = store.record_edge(
+        "other",
+        AuthorityRelationType.CAN_EXECUTE,
+        "session",
+        evidence=OBSERVED,
+    )
+
+    explanation = explain_authority_path(
+        store,
+        [first["edge_id"], second["edge_id"]],
+        starting_ref="worker",
+        expected_target_ref="session",
+    )
+    assert explanation["subject_refs"] == ["worker", "token", "session"]
+    assert explanation["trust_boundary_refs"] == ["boundary:one", "boundary:two"]
+
+    with pytest.raises(ValueError, match="not contiguous"):
+        explain_authority_path(
+            store,
+            [first["edge_id"], unrelated["edge_id"]],
+            starting_ref="worker",
+        )
+
+
+def test_authority_path_explanation_does_not_guess_wrong_target(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    subject(store, "a", AuthoritySubjectKind.PROCESS)
+    subject(store, "b", AuthoritySubjectKind.PROCESS)
+    edge = store.record_edge(
+        "a",
+        AuthorityRelationType.CAN_EXECUTE,
+        "b",
+        evidence=OBSERVED,
+    )
+
+    with pytest.raises(ValueError, match="does not end"):
+        explain_authority_path(
+            store,
+            [edge["edge_id"]],
+            expected_target_ref="c",
+        )
