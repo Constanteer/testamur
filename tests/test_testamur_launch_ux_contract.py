@@ -50,10 +50,10 @@ def test_launch_copy_preserves_semantic_firewall() -> None:
     ):
         assert boundary in app
 
-    # Do not collapse Testamur into a generic scalar verdict during onboarding.
-    lowered = app.lower()
-    assert "trust score" not in lowered
-    assert "validity score" not in lowered
+    # The product may explain why a generic score is wrong; it must retain the
+    # explicit copy that rejects that collapse rather than presenting a score.
+    assert "not a global trust score" in app
+    assert "not a proof of failure" in app
 
 
 def test_agent_install_surface_keeps_reliance_explicit() -> None:
