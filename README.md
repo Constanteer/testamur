@@ -12,6 +12,9 @@ fetched != relied
 changed != invalid
 stale != false
 lineage != affectedness verdict
+lineage != authority
+reliance != authority
+reachable authority != exercised authority
 ```
 
 ## What it provides
@@ -21,6 +24,7 @@ lineage != affectedness verdict
 - **Explicit reliance** — reconciliation, Policy, Assessment and durable Reliance records.
 - **Change monitoring** — Watches, Evaluations and Alerts for upstream sources.
 - **Impact analysis** — lineage and affectedness evidence for targeted revalidation.
+- **Authority analysis** — evidence-backed credential, connector, capability and compromise reachability without conflating reachability with exploitation.
 - **Source Gateway** — exact-revision source access, including a local stdio MCP server.
 - **Local interfaces** — CLI plus a local Web workspace over the same canonical state.
 
@@ -106,6 +110,7 @@ Start with:
 - [Agent workflow](docs/TESTAMUR_AGENT_WORKFLOW.md)
 - [Temporal model](docs/TESTAMUR_TEMPORAL_MODEL.md)
 - [Lineage engine](docs/TESTAMUR_LINEAGE_ENGINE.md)
+- [Authority / Capability Graph](docs/TESTAMUR_AUTHORITY_CAPABILITY_GRAPH.md)
 - [Environment model](docs/TESTAMUR_ENVIRONMENT.md)
 
 ## Development
@@ -122,4 +127,4 @@ The release gate validates the exact Testamur package surface and runs the curre
 
 ## Status
 
-Testamur is under active development. Public interfaces may still evolve, but the semantic boundary is intentional: provenance, verification, exposure, reliance, change and affectedness remain separate concepts.
+Testamur is under active development. Public interfaces may still evolve, but the semantic boundary is intentional: provenance, verification, exposure, reliance, change, affectedness and authority remain separate concepts.
