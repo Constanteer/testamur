@@ -478,6 +478,7 @@ def authority_reachability(
                 "subject_ref": start,
                 "depth": 0,
                 "edge_ids": [],
+                "supporting_edge_ids": [],
                 "visited_refs": (start,),
                 "budget": None,
                 "declared_only_edge_seen": False,
@@ -493,6 +494,7 @@ def authority_reachability(
             "reachability_class": AuthorityReachabilityClass.CONTROLLED.value,
             "depth": 0,
             "path_edge_ids": [],
+            "supporting_edge_ids": [],
             "boundary_refs": [],
             "evidence_state": "SEED_ASSUMPTION",
         }
@@ -529,17 +531,40 @@ def authority_reachability(
             target_ref = str(edge["target_ref"])
             edge_id = str(edge["edge_id"])
             next_path = [*current["edge_ids"], edge_id]
+            current_supporting = list(current.get("supporting_edge_ids") or [])
+            edge_supporting: list[str] = []
+            ok, reasons, unresolved = _check_constraints(store, edge, at=at)
+            supporting_declared_only = False
+
+            if ok and relation == AuthorityRelationType.CAN_AUTHENTICATE_AS.value:
+                (
+                    acceptance_ok,
+                    edge_supporting,
+                    acceptance_reasons,
+                    acceptance_unresolved,
+                    supporting_declared_only,
+                ) = _authentication_acceptance(store, edge, at=at)
+                if not acceptance_ok:
+                    ok = False
+                    reasons = sorted({*reasons, *acceptance_reasons})
+                    unresolved = sorted({*unresolved, *acceptance_unresolved})
+
+            supporting_edge_ids = sorted({*current_supporting, *edge_supporting})
+            basis_edge_ids = [*next_path, *supporting_edge_ids]
             boundaries = sorted(
                 {
                     boundary
-                    for path_edge_id in next_path
+                    for basis_edge_id in basis_edge_ids
                     for boundary in (
-                        store.get_edge(path_edge_id).get("boundary_refs") or []
+                        store.get_edge(basis_edge_id).get("boundary_refs") or []
                     )
                 }
             )
-            ok, reasons, unresolved = _check_constraints(store, edge, at=at)
-            declared_only_seen = bool(current["declared_only_edge_seen"]) or _edge_is_declared_only(edge)
+            declared_only_seen = (
+                bool(current["declared_only_edge_seen"])
+                or _edge_is_declared_only(edge)
+                or supporting_declared_only
+            )
 
             if not ok:
                 blocked.append(
@@ -549,6 +574,7 @@ def authority_reachability(
                         "target_ref": target_ref,
                         "relation_type": relation,
                         "path_edge_ids": next_path,
+                        "supporting_edge_ids": supporting_edge_ids,
                         "reasons": reasons,
                         "unresolved_constraints": unresolved,
                         "reachability_class": (
@@ -588,6 +614,7 @@ def authority_reachability(
                             "target_ref": target_ref,
                             "relation_type": relation,
                             "path_edge_ids": next_path,
+                            "supporting_edge_ids": supporting_edge_ids,
                             "reasons": ["missing_explicit_capability"],
                             "unresolved_constraints": [],
                             "reachability_class": AuthorityReachabilityClass.UNKNOWN.value,
@@ -613,6 +640,7 @@ def authority_reachability(
                                 "reachability_class": AuthorityReachabilityClass.ACTIONABLE.value,
                                 "depth": depth + 1,
                                 "path_edge_ids": next_path,
+                                "supporting_edge_ids": supporting_edge_ids,
                                 "boundary_refs": boundaries,
                                 "evidence_state": _path_evidence_state(declared_only_seen),
                             }
@@ -651,6 +679,7 @@ def authority_reachability(
                             "target_ref": target_ref,
                             "relation_type": relation,
                             "path_edge_ids": next_path,
+                            "supporting_edge_ids": supporting_edge_ids,
                             "reasons": ["missing_or_empty_delegated_capability_set"],
                             "unresolved_constraints": [],
                             "reachability_class": AuthorityReachabilityClass.UNKNOWN.value,
@@ -679,6 +708,7 @@ def authority_reachability(
                         "reachability_class": next_class,
                         "depth": depth + 1,
                         "path_edge_ids": next_path,
+                        "supporting_edge_ids": supporting_edge_ids,
                         "boundary_refs": boundaries,
                         "evidence_state": _path_evidence_state(declared_only_seen),
                         "delegated_capability_budget": (
@@ -706,6 +736,7 @@ def authority_reachability(
                     "subject_ref": target_ref,
                     "depth": depth + 1,
                     "edge_ids": next_path,
+                    "supporting_edge_ids": supporting_edge_ids,
                     "visited_refs": (*current["visited_refs"], target_ref),
                     "budget": next_budget,
                     "declared_only_edge_seen": declared_only_seen,
