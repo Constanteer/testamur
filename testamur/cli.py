@@ -8,6 +8,7 @@ from typing import Any
 
 from .agent_wrapper import run_agent_command
 from .authority import TestamurAuthorityStore
+from .authority_explain import explain_authority_path
 from .authority_reachability import (
     CompromiseModel,
     authority_blast_radius,
@@ -367,6 +368,11 @@ def build_parser() -> argparse.ArgumentParser:
     authority_show = authority_sub.add_parser("show", help="show an authority subject and its edges")
     authority_show.add_argument("ref")
 
+    authority_explain = authority_sub.add_parser("explain", help="hydrate one exact recorded authority path")
+    authority_explain.add_argument("edge_ids", nargs="+")
+    authority_explain.add_argument("--start", dest="starting_ref")
+    authority_explain.add_argument("--target", dest="expected_target_ref")
+
     authority_reach = authority_sub.add_parser("reach", help="trace evidence-backed compromise reachability")
     authority_reach.add_argument("ref")
     authority_reach.add_argument(
@@ -457,6 +463,13 @@ def main(argv: list[str] | None = None) -> int:
                     "incoming_edges": authority.edges_to(args.ref),
                     "outgoing_edges": authority.edges_from(args.ref),
                 }
+            elif args.authority_command == "explain":
+                value = explain_authority_path(
+                    authority,
+                    list(args.edge_ids),
+                    starting_ref=args.starting_ref,
+                    expected_target_ref=args.expected_target_ref,
+                )
             elif args.authority_command == "reach":
                 if authority.maybe_subject(args.ref) is None:
                     raise KeyError(args.ref)
