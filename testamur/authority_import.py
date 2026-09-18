@@ -28,6 +28,30 @@ def _strings(value: Any, field: str) -> list[str]:
     return sorted({_text(item, f"{field}[]") for item in values})
 
 
+def _validated_capability(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one imported permission without inventing wildcard semantics.
+
+    Provider connector payloads are an authority boundary. A capability must name an
+    exact namespace/action pair; missing or blank fields are rejected at import time
+    rather than merely becoming unusable later in reachability. Resource, when
+    present, is textual, and constraints must be an object so provider conditions are
+    retained verbatim for fail-closed attenuation.
+    """
+    item = dict(raw)
+    item["namespace"] = _text(item.get("namespace"), "capability.namespace")
+    item["action"] = _text(item.get("action"), "capability.action")
+    if item.get("resource") is not None:
+        item["resource"] = _text(item.get("resource"), "capability.resource")
+    constraints = item.get("constraints")
+    if constraints is None:
+        item["constraints"] = {}
+    elif isinstance(constraints, Mapping):
+        item["constraints"] = dict(constraints)
+    else:
+        raise ValueError("capability.constraints must be an object")
+    return item
+
+
 def _validated_evidence_item(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Validate one imported authority fact's exact evidence record.
 
@@ -220,8 +244,10 @@ def record_connector_delegation(
 
     Empty delegation is rejected instead of being interpreted as unrestricted access.
     Provider installation/adjacency therefore never becomes permission by connectivity.
+    Every imported capability must also name an explicit namespace/action pair; malformed
+    provider permission records are rejected rather than stored as wildcard-like data.
     """
-    caps = [dict(item) for item in capabilities]
+    caps = [_validated_capability(item) for item in capabilities]
     if not caps:
         raise ValueError("connector delegation requires an explicit non-empty capability set")
     return store.record_edge(
