@@ -320,7 +320,7 @@ def _authentication_acceptance(
 
     return (
         False,
-        [],
+        sorted(str(candidate["edge_id"]) for candidate in candidates),
         sorted({"credential_acceptance_constraints_unsatisfied", *accumulated_reasons}),
         sorted(accumulated_unresolved),
         all_declared_only,
