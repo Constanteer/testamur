@@ -336,7 +336,12 @@ def _delegation_budget(
     ]
     if not capabilities:
         return () if str(edge.get("relation_type")) == AuthorityRelationType.DELEGATES.value else inherited
-    keys = tuple(sorted({_capability_key(item) for item in capabilities}))
+    keys = tuple(
+        sorted(
+            {_capability_key(item) for item in capabilities},
+            key=lambda item: (item[0], item[1], "" if item[2] is None else item[2]),
+        )
+    )
     if inherited is None:
         return keys
     result = tuple(
