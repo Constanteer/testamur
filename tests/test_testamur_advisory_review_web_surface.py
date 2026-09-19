@@ -1,0 +1,23 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB = ROOT / "testamur" / "web"
+
+
+def test_project_web_loads_advisory_review_surface_before_app():
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert html.index('/advisory-review-ui.js') < html.index('/app.js')
+
+
+def test_advisory_review_surface_uses_canonical_projection_without_score():
+    source = (WEB / "advisory-review-ui.js").read_text(encoding="utf-8")
+    assert "testamur.product.advisory-review.v1" in source
+    assert "advisory_review_required_count" in source
+    assert "advisory_competing_count" in source
+    assert "competing heads" in source.lower()
+    assert "immutable recorded conclusions" in source
+    assert "not generic verification" in source
+    assert "trust scores" in source
+    assert "score =" not in source
+    assert "candidate_status === 'affected'" not in source
