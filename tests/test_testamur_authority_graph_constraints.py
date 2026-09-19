@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from testamur.authority_graph_constraints import (
+    evaluate_exact_edge_constraints,
     graph_context_constraints_satisfied,
     resolve_graph_context_verdict,
 )
@@ -78,3 +79,45 @@ def test_graph_context_preserves_unresolved_runtime_gate() -> None:
         (False, [], ["resource", "device_binding"]), source_ref="connector:github", target_ref="repo:Constanteer/testamur"
     )
     assert (ok, reasons, unresolved) == (False, [], ["device_binding"])
+
+
+def test_exact_edge_composes_token_audience_scope_and_resource() -> None:
+    edge = {
+        "source_ref": "connector:github",
+        "target_ref": "repo:Constanteer/testamur",
+        "constraints": {
+            "required_audience": "github.com",
+            "required_scopes": ["contents:read"],
+            "resource": "repo:Constanteer/testamur",
+        },
+    }
+    verdict = evaluate_exact_edge_constraints(
+        edge,
+        credential_attributes={"audiences": ["github.com"], "scopes": ["contents:read", "metadata:read"]},
+        as_of="2026-09-19T06:00:00Z",
+    )
+    assert verdict == (True, [], [])
+
+
+def test_exact_edge_wrong_resource_blocks_even_with_valid_token_metadata() -> None:
+    edge = {
+        "source_ref": "connector:github",
+        "target_ref": "repo:Constanteer/testamur",
+        "constraints": {"required_audience": "github.com", "resource": "repo:Constanteer/other"},
+    }
+    verdict = evaluate_exact_edge_constraints(
+        edge,
+        credential_attributes={"audiences": ["github.com"]},
+        as_of="2026-09-19T06:00:00Z",
+    )
+    assert verdict == (False, ["resource_mismatch"], [])
+
+
+def test_exact_edge_runtime_gate_stays_unresolved_after_graph_match() -> None:
+    edge = {
+        "source_ref": "connector:github",
+        "target_ref": "repo:Constanteer/testamur",
+        "constraints": {"resource": "repo:Constanteer/testamur", "device_binding": "managed"},
+    }
+    verdict = evaluate_exact_edge_constraints(edge, credential_attributes={}, as_of="2026-09-19T06:00:00Z")
+    assert verdict == (False, [], ["device_binding"])
