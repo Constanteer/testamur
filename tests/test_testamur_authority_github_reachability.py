@@ -3,6 +3,7 @@ from __future__ import annotations
 from testamur.authority import AuthorityRelationType, AuthoritySubjectKind, TestamurAuthorityStore
 from testamur.authority_github import record_github_connector_permissions
 from testamur.authority_reachability import CompromiseModel, authority_reachability
+from testamur.authority_reachability_policy import capability_rejection_diagnostics
 
 
 def evidence(ref: str):
@@ -72,6 +73,49 @@ def test_selected_installation_only_reaches_explicit_repositories(tmp_path):
     blocked = [item for item in result["blocked_transitions"] if item["target_ref"] == "repo:b"]
     assert blocked
     assert blocked[0]["reasons"] == ["missing_explicit_or_authorized_capability"]
+
+
+def test_rejection_diagnostics_preserve_exact_repository_budget(tmp_path):
+    store = build_graph(
+        tmp_path,
+        repository_selection="selected",
+        repository_refs=["repo:a"],
+    )
+    delegation = store.list_edges(
+        source_ref="session:user",
+        target_ref="connector:github:42",
+        relation_type=AuthorityRelationType.DELEGATES,
+    )[0]
+    candidate = store.list_edges(
+        source_ref="connector:github:42",
+        target_ref="repo:b",
+        relation_type=AuthorityRelationType.HAS_CAPABILITY,
+    )[0]
+    inherited = tuple(delegation["capabilities"])
+    diagnostic = capability_rejection_diagnostics(candidate, inherited)
+    assert diagnostic is not None
+    assert diagnostic["reasons"] == ["repository_scope_outside_delegation"]
+    assert diagnostic["unresolved_constraints"] == []
+    assert diagnostic["candidate_capabilities"] == [action_cap("repo:b")]
+    assert diagnostic["inherited_capability_budget"] == list(inherited)
+
+
+def test_unresolved_repository_budget_is_reported_as_unresolved(tmp_path):
+    store = build_graph(tmp_path)
+    delegation = store.list_edges(
+        source_ref="session:user",
+        target_ref="connector:github:42",
+        relation_type=AuthorityRelationType.DELEGATES,
+    )[0]
+    candidate = store.list_edges(
+        source_ref="connector:github:42",
+        target_ref="repo:a",
+        relation_type=AuthorityRelationType.HAS_CAPABILITY,
+    )[0]
+    diagnostic = capability_rejection_diagnostics(candidate, tuple(delegation["capabilities"]))
+    assert diagnostic is not None
+    assert diagnostic["reasons"] == ["repository_selection_unresolved"]
+    assert diagnostic["unresolved_constraints"] == ["repository_selection"]
 
 
 def test_unresolved_installation_scope_cannot_authorize_repository_action(tmp_path):
