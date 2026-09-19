@@ -3,6 +3,8 @@ from __future__ import annotations
 from fnmatch import fnmatchcase
 from typing import Any, Mapping, Sequence
 
+from .authority_credentials import credential_constraints_satisfied
+
 
 def _values(value: Any) -> set[str]:
     if value is None:
@@ -94,11 +96,10 @@ def resolve_graph_context_verdict(
 ) -> tuple[bool, list[str], list[str]]:
     """Refine a metadata verdict using evidence from the exact traversed edge.
 
-    A metadata evaluator reports ``ok=False`` both for hard failures and while a
-    graph-only key is unresolved. Exact graph evidence may discharge the latter,
-    but reasons already emitted by the metadata evaluator are immutable. Thus a
-    matching target can never launder expiry, revocation, audience/scope mismatch,
-    approval, MFA, or any other established failure into exercisable authority.
+    Exact graph evidence may discharge unresolved graph-only gates, but failures
+    already established by credential metadata are immutable. A matching target
+    can therefore never launder expiry, revocation, audience/scope mismatch,
+    approval, MFA, or another established failure into exercisable authority.
     """
     _credential_ok, credential_reasons, unresolved = credential_verdict
     _graph_ok, graph_reasons, remaining = graph_context_constraints_satisfied(
@@ -113,4 +114,46 @@ def resolve_graph_context_verdict(
     return not reasons and not remaining, reasons, remaining
 
 
-__all__ = ["graph_context_constraints_satisfied", "resolve_graph_context_verdict"]
+def evaluate_exact_edge_constraints(
+    edge: Mapping[str, Any],
+    *,
+    credential_attributes: Mapping[str, Any],
+    source_subject: Mapping[str, Any] | None = None,
+    target_subject: Mapping[str, Any] | None = None,
+    attribute_ref: str | None = None,
+    as_of: Any = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Canonical two-stage constraint evaluation for one exact authority edge.
+
+    Stage one evaluates credential/token metadata (audience, scope, issuer,
+    tenant, validity and explicit runtime gates). Stage two may discharge only
+    graph-context keys using the exact traversed source/target identities.
+    No neighboring edge, material-lineage relation, or generic object metadata
+    participates in authorization.
+    """
+    raw = edge.get("constraints")
+    if raw is not None and not isinstance(raw, Mapping):
+        return False, [], ["constraints"]
+    constraints = dict(raw or {})
+    source_ref = str(edge.get("source_ref") or "")
+    target_ref = str(edge.get("target_ref") or "")
+    verdict = credential_constraints_satisfied(
+        credential_attributes,
+        constraints,
+        as_of=as_of,
+    )
+    return resolve_graph_context_verdict(
+        constraints,
+        verdict,
+        source_ref=source_ref if attribute_ref is None else str(attribute_ref),
+        target_ref=target_ref,
+        source_subject=source_subject,
+        target_subject=target_subject,
+    )
+
+
+__all__ = [
+    "evaluate_exact_edge_constraints",
+    "graph_context_constraints_satisfied",
+    "resolve_graph_context_verdict",
+]
