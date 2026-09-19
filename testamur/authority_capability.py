@@ -39,12 +39,7 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _well_formed(capability: Mapping[str, Any]) -> bool:
-    """Reject malformed authority observations instead of treating them as wildcards.
-
-    This guard is intentionally repeated at the algebra boundary even though provider
-    importers validate their payloads. Authority edges can also be constructed by
-    local callers/tests/migrations, so reachability must not depend on importer hygiene.
-    """
+    """Reject malformed authority observations instead of treating them as wildcards."""
     namespace = capability.get("namespace")
     action = capability.get("action")
     if not (
@@ -65,12 +60,21 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
         return False
     constraints = _constraints(capability)
 
-    # Time-bounded authority with an invalid timestamp is not unbounded authority.
     if "expires_at" in constraints and _parse_time(constraints.get("expires_at")) is None:
         return False
 
     for key in ("approval_required", "human_confirmation_required", "mfa_required"):
         if key in constraints and not isinstance(constraints[key], bool):
+            return False
+
+    selection = constraints.get("repository_selection")
+    if selection is not None:
+        if selection not in {"all", "selected", "unresolved"}:
+            return False
+        refs = _constraint_set(constraints, "repository_ref", "repository_refs")
+        if selection == "selected" and not refs:
+            return False
+        if selection in {"all", "unresolved"} and refs:
             return False
 
     return True
@@ -101,6 +105,36 @@ def _resource_within(child: str | None, parent: str | None, parent_pattern: str 
     return child == parent
 
 
+def _repository_scope_is_attenuation(
+    child_constraints: Mapping[str, Any], parent_constraints: Mapping[str, Any]
+) -> bool:
+    """Compare provider repository-selection scope without turning absence into `all`.
+
+    `unresolved` is deliberately not an authority wildcard. It may only remain
+    unresolved downstream; any operation that names a repository must first have an
+    exact selected set or an explicit provider observation of `all` repositories.
+    """
+    parent_selection = parent_constraints.get("repository_selection")
+    if parent_selection is None:
+        return True
+
+    child_selection = child_constraints.get("repository_selection")
+    parent_refs = _constraint_set(parent_constraints, "repository_ref", "repository_refs")
+    child_refs = _constraint_set(child_constraints, "repository_ref", "repository_refs")
+
+    if parent_selection == "unresolved":
+        return child_selection == "unresolved" and not child_refs
+    if parent_selection == "selected":
+        return child_selection == "selected" and bool(child_refs) and child_refs <= parent_refs
+    if parent_selection == "all":
+        if child_selection == "all":
+            return not child_refs
+        if child_selection == "selected":
+            return bool(child_refs)
+        return False
+    return False
+
+
 def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any]) -> bool:
     """Return True only when child cannot exercise more authority than parent."""
     if not _well_formed(child) or not _well_formed(parent):
@@ -119,6 +153,9 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     ):
         return False
 
+    if not _repository_scope_is_attenuation(cc, pc):
+        return False
+
     set_aliases = (
         ("scope", "scopes", "required_scope", "required_scopes"),
         ("audience", "audiences", "required_audience", "required_audiences"),
@@ -133,7 +170,7 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     )
     gate_keys = {"approval_required", "human_confirmation_required", "mfa_required"}
     handled = {alias for group in set_aliases for alias in group} | gate_keys | {
-        "resource_pattern", "expires_at"
+        "resource_pattern", "expires_at", "repository_selection", "repository_ref", "repository_refs"
     }
 
     for aliases in set_aliases:
