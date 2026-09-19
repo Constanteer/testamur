@@ -32,9 +32,7 @@ def test_github_write_permission_does_not_become_generic_admin(tmp_path):
 
 def test_github_unknown_permission_level_fails_closed():
     with pytest.raises(ValueError, match="unsupported GitHub permission level"):
-        github_permission_capabilities(
-            {"contents": "admin"}, installation_id="42"
-        )
+        github_permission_capabilities({"contents": "admin"}, installation_id="42")
 
 
 def test_github_missing_repository_selection_stays_unresolved():
@@ -86,3 +84,24 @@ def test_record_github_connector_requires_exact_evidence_and_explicit_permission
             evidence_ref="github-installation:43",
             evidence_revision="etag:def456",
         )
+    assert store.maybe_subject("connector:github:empty") is None
+
+
+def test_invalid_exact_evidence_is_rejected_before_connector_subject_is_recorded(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    store.record_subject(
+        AuthoritySubjectKind.SESSION,
+        label="employee session",
+        subject_ref="session:employee",
+    )
+    with pytest.raises(ValueError, match="evidence.revision"):
+        record_github_connector_permissions(
+            store,
+            delegator_ref="session:employee",
+            connector_ref="connector:github:bad-evidence",
+            installation_id="44",
+            permissions={"contents": "read"},
+            evidence_ref="github-installation:44",
+            evidence_revision="",
+        )
+    assert store.maybe_subject("connector:github:bad-evidence") is None
