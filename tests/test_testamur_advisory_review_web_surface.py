@@ -21,3 +21,19 @@ def test_advisory_review_surface_uses_canonical_projection_without_score():
     assert "trust scores" in source
     assert "score =" not in source
     assert "candidate_status === 'affected'" not in source
+
+def test_advisory_review_surface_records_evidence_not_verdicts():
+    source = (WEB / "advisory-review-ui.js").read_text(encoding="utf-8")
+    assert "/v1/advisory-assessments" in source
+    assert "event_revision_id" in source
+    assert "subject_revision" in source
+    assert "evidence_class" in source
+    assert "manual_review" in source
+    assert "supersedes_assessment_id" in source
+    assert "History / Compare" in source
+    assert ">Impact<" in source
+    assert ">Revalidation<" in source
+    assert "payload.state" not in source
+    assert "payload.verdict" not in source
+    assert "payload.trust_score" not in source
+
