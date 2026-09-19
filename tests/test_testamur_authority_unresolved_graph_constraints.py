@@ -42,3 +42,15 @@ def test_service_ref_remains_routing_metadata_for_exact_acceptance_lookup() -> N
     assert ok is True
     assert reasons == []
     assert unresolved == []
+
+
+def test_plural_service_refs_fail_closed_until_exact_multi_target_routing_exists() -> None:
+    ok, reasons, unresolved = credential_constraints_satisfied(
+        {"audience": "api"},
+        {"audience": "api", "service_refs": ["service:api", "service:admin"]},
+        as_of=NOW,
+    )
+
+    assert ok is False
+    assert reasons == []
+    assert unresolved == ["service_refs"]
