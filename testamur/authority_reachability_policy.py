@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .authority import AuthorityRelationType
 from .authority_capability import (
@@ -9,6 +9,7 @@ from .authority_capability import (
     edge_capabilities,
     project_budget,
 )
+from .authority_projection import capability_identity, projected_budget_identity
 
 
 _IMPLICIT_ACTIONS = {
@@ -63,9 +64,50 @@ def project_downstream_budget(
     return project_budget(budget)
 
 
+def action_result_identity(
+    target_ref: str,
+    capability: Mapping[str, Any],
+    path_edge_ids: Sequence[str],
+) -> tuple[str, str, tuple[str, ...]]:
+    """Identity for an actionable result without collapsing constrained authority.
+
+    Reachability historically keyed actions by namespace/action/resource only. That
+    makes differently scoped, audience-bound, tenant-bound, or approval-gated
+    capabilities indistinguishable. Keep the exact effective capability in the key.
+    """
+    return (
+        str(target_ref),
+        capability_identity(capability),
+        tuple(str(edge_id) for edge_id in path_edge_ids),
+    )
+
+
+def traversal_state_identity(
+    subject_ref: str,
+    reachability_class: str,
+    budget: CapabilityBudget | None,
+    path_edge_ids: Sequence[str],
+) -> tuple[str, str, tuple[str, ...] | None, tuple[str, ...]]:
+    """Identity for a traversal state including the exact inherited authority budget.
+
+    ``None`` remains distinct from ``()``: the former means no inherited delegation
+    restriction, while the latter is an explicitly empty authority budget. This is
+    essential when compromise paths converge on the same subject through different
+    connector delegations.
+    """
+    return (
+        str(subject_ref),
+        str(reachability_class),
+        projected_budget_identity(budget),
+        tuple(str(edge_id) for edge_id in path_edge_ids),
+    )
+
+
 __all__ = [
     "implicit_capability",
     "exercisable_capabilities",
     "downstream_budget",
     "project_downstream_budget",
+    "action_result_identity",
+    "traversal_state_identity",
 ]
