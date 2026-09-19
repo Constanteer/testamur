@@ -173,3 +173,33 @@ def test_project_supply_chain_projects_only_exact_advisory_candidates(tmp_path) 
     assert candidate["semantics"]["exact_identity_overlap_is_affectedness_verdict"] is False
     assert candidate["semantics"]["applicability_assessment_required"] is True
     assert supply["semantics"]["unresolved_identity_is_not_fuzzy_matched"] is True
+
+
+def test_project_projection_uses_latest_changed_supply_chain_scan(tmp_path) -> None:
+    root = tmp_path / "demo"
+    root.mkdir()
+    requirements = root / "requirements.txt"
+    requirements.write_text("requests==2.32.5\n", encoding="utf-8")
+    service = TestamurProductService(tmp_path / "state" / "evidence.db")
+
+    first = json.loads(
+        _dispatch_json(service, ["project", "import", str(root), "--name", "demo"])
+    )
+    requirements.write_text(
+        "requests==2.32.5\nflask==3.1.2\n",
+        encoding="utf-8",
+    )
+    second = json.loads(
+        _dispatch_json(service, ["project", "import", str(root), "--name", "demo"])
+    )
+
+    project = service.project("demo")
+    assert project["ok"] is True
+    supply = project["supply_chain"]
+    assert second["scan_revision_id"] != first["scan_revision_id"]
+    assert supply["scan_revision_id"] == second["scan_revision_id"]
+    assert supply["dependency_count"] == 2
+    assert {(item["name"], item["version"]) for item in supply["dependencies"]} == {
+        ("flask", "3.1.2"),
+        ("requests", "2.32.5"),
+    }
