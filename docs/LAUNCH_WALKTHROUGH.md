@@ -8,83 +8,33 @@ This is the canonical launch/demo script for showing Testamur without collapsing
 
 **Screen:** Testamur dashboard, then a project.
 
-**Narration:**
-
-> Software, research, and agent work increasingly depend on material no one person can continuously reread. Testamur records what a project used, observes those sources over time, and makes downstream review explicit when something changes.
+**Narration:** Software, research, and agent work increasingly depend on material no one person can continuously reread. Testamur records what a project used, observes those sources over time, and makes downstream review explicit when something changes.
 
 Do **not** say “Testamur verifies everything” or “Testamur tells you what is trustworthy.”
 
 ### 0:12–0:28 — Project and source
 
-**Screen:** Open the example project and its first monitor. Open the Source object.
-
-**Narration:**
-
-> A Project groups work. A Monitor observes a target. The target is represented as a stable Source, while each observation produces revision evidence. Recording a source is not the same as verifying its claims.
-
-On-screen semantic boundary:
-
-`recorded != verified`
+Open the example project and its first monitor, then the Source object. A Project groups work; a Monitor observes a target; the target is represented as a stable Source while observations produce revision evidence. `recorded != verified`.
 
 ### 0:28–0:43 — Revision and change
 
-**Screen:** History → two revisions → Compare.
-
-**Narration:**
-
-> When the observed material changes, Testamur keeps both revisions and a comparison. “Changed” is deliberately descriptive: it does not mean the previous work is invalid.
-
-On-screen semantic boundary:
-
-`changed != invalid`
+History → two revisions → Compare. A comparison records the mechanical delta. `changed != invalid`.
 
 ### 0:43–0:58 — Reliance and impact
 
-**Screen:** Impact view with one recorded downstream reliance.
-
-**Narration:**
-
-> Impact starts from recorded reliance, not from everything the system happened to fetch or expose to a model. That distinction prevents a large context window from becoming a fabricated dependency graph.
-
-On-screen boundaries:
-
-`fetched != relied`
-
-`EXPOSED_TO_MODEL != RELIED`
+Open Impact with one recorded downstream reliance. Impact starts from recorded reliance, not everything fetched or exposed to a model. `fetched != relied`; `EXPOSED_TO_MODEL != RELIED`.
 
 ### 0:58–1:12 — Revalidation
 
-**Screen:** Revalidation queue / review action.
-
-**Narration:**
-
-> A relevant change can create a review obligation. Revalidation records the human or machine review that follows. A stale result means its freshness requirement was missed; it does not mean the underlying claim became false.
-
-On-screen boundary:
-
-`stale != false`
+Open Revalidation. A relevant change can create a review obligation; revalidation records the review that follows. `stale != false`.
 
 ### 1:12–1:24 — Supply chain
 
-**Screen:** Project → Supply chain; show manifests, exact material, advisory candidate.
-
-**Narration:**
-
-> For software projects, Testamur can record manifest and lockfile evidence. A declaration is not proof of runtime use, and an advisory identity match is not an affectedness verdict. Applicability remains an explicit assessment.
-
-On-screen boundaries:
-
-`manifest declaration != runtime use`
-
-`advisory identity match != affectedness verdict`
+Project → Supply chain. Show manifests, exact material and an advisory candidate. A declaration is not proof of runtime use, and an advisory identity match is not an affectedness verdict.
 
 ### 1:24–1:30 — Agents
 
-**Screen:** Help → Integrations → MCP/Codex installation.
-
-**Narration:**
-
-> Humans and agents can use the same provenance model through the CLI and MCP integration. The point is not blind trust in machine output; it is preserving the right to ask why.
+Help → Integrations → MCP/Codex installation. Humans and agents use the same provenance model through Web, CLI and MCP; no integration upgrades recorded/fetched material into verification.
 
 End card: **Testamur — provenance, change, reliance, review.**
 
@@ -92,57 +42,55 @@ End card: **Testamur — provenance, change, reliance, review.**
 
 Use the bundled/example project rather than creating synthetic ontology for the demo.
 
-1. **Open the example project.** Explain Project vs Monitor vs Source in one sentence each.
-2. **Open a Source.** Show its stable identity and recorded history. State `recorded != verified`.
-3. **Open two revisions and Compare.** Point to the concrete changed material. State `changed != invalid`.
-4. **Open Impact.** Show only explicit reliance edges. State `fetched != relied` and `EXPOSED_TO_MODEL != RELIED`.
-5. **Open Revalidation.** Show the review obligation/result rather than calling the dependency “bad.” State `stale != false`.
-6. **Return to the Project → Supply chain.** Show manifest hashes, dependency identity strength, and an advisory candidate if the fixture contains one. Explain that exact identity overlap still requires affectedness assessment.
-7. **Open Help → Integrations.** Show the CLI/MCP/Codex entry points and finish with the quickstart link.
+1. Open the example project; explain Project vs Monitor vs Source.
+2. Open a Source and its history; state `recorded != verified`.
+3. Open two revisions and Compare; point to concrete changed material; state `changed != invalid`.
+4. Open Impact; show only explicit reliance edges; state `fetched != relied` and `EXPOSED_TO_MODEL != RELIED`.
+5. Open Revalidation; show the review obligation/result rather than calling the dependency “bad”; state `stale != false`.
+6. Project → Supply chain; show manifest hashes, dependency identity strength, and an advisory candidate if present. Exact identity overlap still requires affectedness assessment.
+7. Help → Integrations; show CLI/MCP/Codex entry points and finish with Quickstart.
+
+## Demo → real-project handoff
+
+The demo is successful only if a first-time user can repeat the same workflow on their own target. From the demo, return to Projects and choose **New Project**. Create the container with the intended Private/Public visibility, then add a Monitor for the real target. For an existing repository, use the supported repository binding/supply-chain scan instead of manually recreating dependency facts.
+
+After the first observation, the user's normal loop is exactly the one learned in the demo:
+
+`Source → Revision → Compare → Impact → Revalidation`
+
+Handoff checklist:
+
+- create the Project with the intended visibility;
+- add a Monitor for the actual target;
+- run/import the existing-project supply-chain scan when applicable;
+- record the first Revision, then make or observe one controlled change;
+- Compare the two revisions before making an affectedness claim;
+- inspect Impact from recorded lineage;
+- revalidate the relevant downstream item and retain that result as evidence.
+
+If a deployed surface cannot perform one of these steps, say that it is unavailable; never substitute a claim that a gate or verification ran.
 
 ## Recording checklist
 
-Before recording a launch video:
-
 - use a clean first-run account or local workspace;
-- keep browser zoom at a readable level and hide unrelated tabs/account data;
+- keep browser zoom readable and hide unrelated account data;
 - verify `/quickstart`, `/demo`, `/learn`, `/docs`, and `/integrations` are reachable in the deployed environment;
-- ensure the example project has enough recorded history to demonstrate Compare and Impact without inventing relations;
+- ensure the example project has enough recorded history for Compare and Impact without inventing relations;
 - do not call an HTTP-reachable page “verified”;
-- do not describe an advisory candidate as a confirmed vulnerability unless an explicit affectedness assessment supports that statement;
-- do not imply a fetched or model-exposed source was relied upon unless a reliance edge was actually recorded;
+- do not describe an advisory candidate as a confirmed vulnerability without explicit affectedness assessment;
+- do not imply a fetched/model-exposed source was relied upon unless a reliance edge was recorded;
 - if CI/deployment infrastructure did not execute, describe it as unexecuted rather than green.
 
 ## Short launch clips
 
-### 20 seconds — change workflow
+**Change workflow:** Project → Source → Revision → Compare → Impact → Revalidation. “Testamur records what changed, then follows explicit reliance to show what deserves review. Change is evidence, not a verdict.”
 
-Project → Source → Revision → Compare → Impact → Revalidation.
+**Agent provenance:** Integrations → MCP setup → recorded source/reliance view. “Agent context is not automatically evidence of reliance. Testamur keeps exposure, retrieval, and reliance distinct.”
 
-Narration: “Testamur records what changed, then follows explicit reliance to show what deserves review. Change is evidence, not a verdict.”
-
-### 20 seconds — agent provenance
-
-Integrations → MCP setup → recorded source/reliance view.
-
-Narration: “Agent context is not automatically evidence of reliance. Testamur keeps exposure, retrieval, and reliance distinct so an agent can leave a reviewable trail instead of a generic trust score.”
-
-### 20 seconds — software supply chain
-
-Supply chain → manifest → dependency → advisory candidate.
-
-Narration: “Record the exact dependency evidence you have. Match advisories against exact identities where possible, then assess applicability explicitly. Declaration is not runtime use; identity match is not affectedness.”
+**Software supply chain:** Supply chain → manifest → dependency → advisory candidate. “Record the exact dependency evidence you have, then assess applicability explicitly. Declaration is not runtime use; identity match is not affectedness.”
 
 ## Acceptance criteria for launch UX
 
-A first-time user should be able to answer, without reading internal architecture documentation:
+A first-time user should be able to answer without internal architecture documentation: What is Testamur for? What should I do first? What differs between Project, Monitor, Source and Revision? Where do I compare observations? Why did a change create an Impact/Revalidation item? What does Testamur *not* claim from a recorded/fetched/stale item? How do I connect CLI, MCP or Codex? How do I move from Demo to my own project?
 
-- What is Testamur for?
-- What should I do first?
-- What is the difference between a Project, Monitor, Source, and Revision?
-- Where do I compare two observations?
-- Why did a change create an Impact/Revalidation item?
-- What does Testamur *not* claim from a recorded/fetched/stale item?
-- How do I connect the CLI, MCP, or Codex?
-
-If any answer requires knowledge of an internal identifier or ontology term that is not explained in context, treat that as a product UX defect rather than a documentation-only problem.
+If an answer requires an unexplained internal identifier or ontology term, treat that as a product UX defect rather than a documentation-only problem.
