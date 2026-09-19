@@ -18,10 +18,11 @@ class FakeService:
         return self.blast
 
 
-def _engine_result(schema: str):
+def _engine_result(schema_version: str):
     return {
-        "schema": schema,
-        "starting_ref": "subject:token",
+        "schema_version": schema_version,
+        "starting_subject_ref": "subject:token",
+        "compromise_model": "credential_theft",
         "reachable_subjects": [],
         "actionable_capabilities": [
             {
@@ -78,8 +79,8 @@ def test_facade_preserves_product_service_errors_exactly():
 
 def test_blast_facade_projects_only_explicit_seed_result():
     engine = _engine_result("testamur.authority-blast-radius.v1")
-    engine.pop("starting_ref")
-    engine["starting_refs"] = ["subject:a", "subject:b"]
+    engine.pop("starting_subject_ref")
+    engine["compromised_refs"] = ["subject:a", "subject:b"]
     engine["semantics"] = {
         "affectedness_does_not_seed_compromise": True,
         "material_lineage_does_not_grant_authority": True,
@@ -98,4 +99,5 @@ def test_blast_facade_projects_only_explicit_seed_result():
     )
     assert result["schema"] == "testamur.product.authority-result.v1"
     assert result["semantics"]["affectedness_does_not_seed_compromise"] is True
+    assert result["result"]["compromised_refs"] == ["subject:a", "subject:b"]
     assert service.calls[0][1] == ["subject:a", "subject:b"]
