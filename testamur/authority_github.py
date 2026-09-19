@@ -12,6 +12,28 @@ _GITHUB_LEVEL_ACTIONS: dict[str, tuple[str, ...]] = {
     "read": ("read",),
     "write": ("read", "write"),
 }
+_GITHUB_REPOSITORY_SELECTIONS = {"all", "selected"}
+
+
+def _repository_selection_constraints(
+    repository_refs: Sequence[str] | None,
+    repository_selection: str | None,
+) -> dict[str, Any]:
+    repos = sorted({str(ref).strip() for ref in (repository_refs or ()) if str(ref).strip()})
+    selection = str(repository_selection).strip().lower() if repository_selection is not None else None
+    if selection is not None and selection not in _GITHUB_REPOSITORY_SELECTIONS:
+        raise ValueError(f"unsupported GitHub repository selection: {repository_selection!r}")
+    if selection == "all" and repos:
+        raise ValueError("GitHub repository selection 'all' cannot carry selected repository refs")
+    if selection == "selected" and not repos:
+        raise ValueError("GitHub repository selection 'selected' requires explicit repository refs")
+    if repos:
+        # An exact repository list is itself evidence of selected-repository scope. Do
+        # not broaden it merely because the provider omitted the selection label.
+        return {"repository_selection": "selected", "repository_refs": repos}
+    if selection == "all":
+        return {"repository_selection": "all"}
+    return {"repository_selection": "unresolved"}
 
 
 def github_permission_capabilities(
@@ -19,20 +41,22 @@ def github_permission_capabilities(
     *,
     installation_id: str,
     repository_refs: Sequence[str] | None = None,
+    repository_selection: str | None = None,
 ) -> list[dict[str, Any]]:
     """Translate an observed GitHub App/OAuth permission set without widening it.
 
     ``permissions`` is the exact provider permission object. Unknown levels fail
-    closed. Repository selection is retained as a constraint; absence of a repository
-    list is unresolved rather than interpreted as all repositories.
+    closed. Repository selection is retained as a constraint: an explicit ``all`` is
+    distinct from ``selected`` refs, while absence of both remains unresolved rather
+    than being interpreted as all repositories.
     """
     if not isinstance(permissions, Mapping) or not permissions:
         raise ValueError("GitHub connector permissions must be a non-empty object")
     installation = str(installation_id).strip()
     if not installation:
         raise ValueError("installation_id must be a non-empty string")
+    repo_constraints = _repository_selection_constraints(repository_refs, repository_selection)
 
-    repos = sorted({str(ref).strip() for ref in (repository_refs or ()) if str(ref).strip()})
     result: list[dict[str, Any]] = []
     for permission, raw_level in sorted(permissions.items(), key=lambda item: str(item[0])):
         name = str(permission).strip()
@@ -48,11 +72,8 @@ def github_permission_capabilities(
                 "installation_id": installation,
                 "provider_permission": name,
                 "provider_level": level,
+                **repo_constraints,
             }
-            if repos:
-                constraints["repository_refs"] = repos
-            else:
-                constraints["repository_selection"] = "unresolved"
             result.append(
                 {
                     "namespace": "github",
@@ -74,6 +95,7 @@ def record_github_connector_permissions(
     evidence_ref: str,
     evidence_revision: str,
     repository_refs: Sequence[str] | None = None,
+    repository_selection: str | None = None,
     boundary_refs: Sequence[str] | None = None,
     observed_at: str | None = None,
     analyzer: str = "testamur.github-authority-adapter",
@@ -92,6 +114,7 @@ def record_github_connector_permissions(
         permissions,
         installation_id=installation_id,
         repository_refs=repository_refs,
+        repository_selection=repository_selection,
     )
     evidence = exact_evidence(
         ref=evidence_ref,
