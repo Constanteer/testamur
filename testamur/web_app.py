@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from .authority_web_api import dispatch_authority_web_api
 from .environment import DB_FILE_NAME, ENV_DIR_NAME, discover
 from .product_actions import create_monitor, create_project, refresh_monitor, refresh_project_monitors, run_due_monitors
 from .monitor_provider_manifest import load_monitor_provider_registry
@@ -115,6 +116,13 @@ def _temporal_query(query: Mapping[str, list[str]]) -> dict[str, Any]:
 
 
 def dispatch_api(service: TestamurProductService, target: str) -> dict[str, Any]:
+    try:
+        authority = dispatch_authority_web_api(service, target)
+        if authority is not None:
+            return _json(authority)
+    except ValueError as exc:
+        return _error("invalid_argument", str(exc))
+
     split = urlsplit(target)
     path = split.path.rstrip("/") or "/"
     query = parse_qs(split.query, keep_blank_values=True)
