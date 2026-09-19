@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from .authority import AuthorityRelationType
@@ -18,6 +19,21 @@ _IMPLICIT_ACTIONS = {
     AuthorityRelationType.CAN_WRITE.value: "write",
     AuthorityRelationType.CAN_EXECUTE.value: "execute",
 }
+
+_CONSTRAINT_SETS = (
+    (("scope", "scopes", "required_scope", "required_scopes"), "scope"),
+    (("audience", "audiences", "required_audience", "required_audiences"), "audience"),
+    (("principal", "principals"), "principal"),
+    (("service_ref", "service_refs"), "service_ref"),
+    (("network_zone", "network_zones"), "network_zone"),
+    (("source_ip", "source_ips"), "source_ip"),
+    (("device_binding", "device_bindings"), "device_binding"),
+    (("session_binding", "session_bindings"), "session_binding"),
+    (("issuer", "issuers", "required_issuer", "required_issuers"), "issuer"),
+    (("tenant", "tenants", "tenant_id", "tenant_ids"), "tenant"),
+)
+_GATE_KEYS = ("approval_required", "human_confirmation_required", "mfa_required")
+_REPOSITORY_KEYS = {"repository_selection", "repository_ref", "repository_refs"}
 
 
 def implicit_capability(edge: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -50,9 +66,9 @@ def exercisable_capabilities(
     )
 
 
-def _constraint_set(constraints: Mapping[str, Any], singular: str, plural: str) -> set[str]:
+def _constraint_set(constraints: Mapping[str, Any], singular: str, *plural: str) -> set[str]:
     result: set[str] = set()
-    for key in (singular, plural):
+    for key in (singular, *plural):
         value = constraints.get(key)
         if isinstance(value, str) and value:
             result.add(value)
@@ -61,13 +77,100 @@ def _constraint_set(constraints: Mapping[str, Any], singular: str, plural: str) 
     return result
 
 
+def _parse_time(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any]) -> tuple[set[str], set[str], set[str]]:
+    """Attribute a rejected attenuation without making an independent auth decision.
+
+    The caller invokes this only after canonical ``capability_allowed`` rejected the
+    candidate. These labels explain which parent constraints were not preserved;
+    they never turn a candidate into authority.
+    """
+    reasons: set[str] = set()
+    failed: set[str] = set()
+    unresolved: set[str] = set()
+    cc = candidate.get("constraints") if isinstance(candidate.get("constraints"), Mapping) else {}
+    pc = parent.get("constraints") if isinstance(parent.get("constraints"), Mapping) else {}
+
+    parent_resource = parent.get("resource")
+    if parent_resource is not None and candidate.get("resource") != parent_resource:
+        reasons.add("resource_outside_delegation")
+        failed.add("resource")
+
+    candidate_selection = cc.get("repository_selection")
+    candidate_refs = _constraint_set(cc, "repository_ref", "repository_refs")
+    parent_selection = pc.get("repository_selection")
+    parent_refs = _constraint_set(pc, "repository_ref", "repository_refs")
+    if parent_selection == "unresolved" and candidate_selection != "unresolved":
+        reasons.add("repository_selection_unresolved")
+        failed.add("repository_selection")
+        unresolved.add("repository_selection")
+    elif parent_selection == "selected" and (
+        candidate_selection != "selected" or not candidate_refs or not candidate_refs <= parent_refs
+    ):
+        reasons.add("repository_scope_outside_delegation")
+        failed.add("repository_selection")
+    elif parent_selection == "all" and candidate_selection not in {"all", "selected"}:
+        reasons.add("repository_scope_not_established")
+        failed.add("repository_selection")
+
+    for aliases, canonical in _CONSTRAINT_SETS:
+        parent_values = _constraint_set(pc, *aliases)
+        if not parent_values:
+            continue
+        child_values = _constraint_set(cc, *aliases)
+        if not child_values or not child_values <= parent_values:
+            reasons.add(f"{canonical}_outside_delegation")
+            failed.add(canonical)
+
+    for key in _GATE_KEYS:
+        if pc.get(key) is True and cc.get(key) is not True:
+            reasons.add(f"{key}_not_preserved")
+            failed.add(key)
+
+    if pc.get("expires_at") is not None:
+        parent_expiry = _parse_time(pc.get("expires_at"))
+        child_expiry = _parse_time(cc.get("expires_at"))
+        if parent_expiry is None or child_expiry is None or child_expiry > parent_expiry:
+            reasons.add("expiry_outside_delegation")
+            failed.add("expires_at")
+
+    handled = {alias for aliases, _ in _CONSTRAINT_SETS for alias in aliases}
+    handled.update(_GATE_KEYS)
+    handled.update(_REPOSITORY_KEYS)
+    handled.update({"expires_at", "resource_pattern"})
+    for key, value in pc.items():
+        if key in handled or value in (None, False, "", [], {}, ()):
+            continue
+        if key not in cc or cc[key] != value:
+            reasons.add("provider_constraint_mismatch")
+            failed.add(str(key))
+
+    return reasons, failed, unresolved
+
+
 def capability_rejection_diagnostics(
     edge: Mapping[str, Any], inherited: CapabilityBudget | None
 ) -> dict[str, Any] | None:
     """Explain why explicit edge capabilities do not fit inherited authority.
 
     This is diagnostic only: it calls the same canonical ``capability_allowed``
-    predicate used by traversal and never turns a mismatch into authority.  Exact
+    predicate used by traversal and never turns a mismatch into authority. Exact
     candidate and inherited budgets are returned so Product/CLI/Web can explain a
     denial without reconstructing permissions from graph connectivity.
     """
@@ -79,11 +182,9 @@ def capability_rejection_diagnostics(
         return None
 
     reasons: set[str] = set()
+    failed: set[str] = set()
     unresolved: set[str] = set()
     for candidate in rejected:
-        cc = candidate.get("constraints") if isinstance(candidate.get("constraints"), Mapping) else {}
-        candidate_selection = cc.get("repository_selection")
-        candidate_refs = _constraint_set(cc, "repository_ref", "repository_refs")
         matching_identity = [
             parent for parent in inherited
             if str(parent.get("namespace") or "") == str(candidate.get("namespace") or "")
@@ -91,25 +192,22 @@ def capability_rejection_diagnostics(
         ]
         if not matching_identity:
             reasons.add("delegated_capability_identity_mismatch")
+            failed.update({"namespace", "action"})
             continue
+        attributed = False
         for parent in matching_identity:
-            pc = parent.get("constraints") if isinstance(parent.get("constraints"), Mapping) else {}
-            parent_selection = pc.get("repository_selection")
-            parent_refs = _constraint_set(pc, "repository_ref", "repository_refs")
-            if parent_selection == "unresolved" and candidate_selection != "unresolved":
-                reasons.add("repository_selection_unresolved")
-                unresolved.add("repository_selection")
-            elif parent_selection == "selected" and (
-                candidate_selection != "selected" or not candidate_refs or not candidate_refs <= parent_refs
-            ):
-                reasons.add("repository_scope_outside_delegation")
-            elif parent_selection == "all" and candidate_selection not in {"all", "selected"}:
-                reasons.add("repository_scope_not_established")
-            else:
-                reasons.add("capability_constraints_outside_delegation")
+            parent_reasons, parent_failed, parent_unresolved = _failed_constraints(candidate, parent)
+            if parent_reasons:
+                attributed = True
+                reasons.update(parent_reasons)
+                failed.update(parent_failed)
+                unresolved.update(parent_unresolved)
+        if not attributed:
+            reasons.add("capability_constraints_outside_delegation")
 
     return {
         "reasons": sorted(reasons) or ["capability_constraints_outside_delegation"],
+        "failed_constraints": sorted(failed),
         "unresolved_constraints": sorted(unresolved),
         "candidate_capabilities": rejected,
         "inherited_capability_budget": project_budget(inherited),
