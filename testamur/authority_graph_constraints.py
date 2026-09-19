@@ -125,11 +125,10 @@ def evaluate_exact_edge_constraints(
 ) -> tuple[bool, list[str], list[str]]:
     """Canonical two-stage constraint evaluation for one exact authority edge.
 
-    Stage one evaluates credential/token metadata (audience, scope, issuer,
-    tenant, validity and explicit runtime gates). Stage two may discharge only
-    graph-context keys using the exact traversed source/target identities.
-    No neighboring edge, material-lineage relation, or generic object metadata
-    participates in authorization.
+    ``attribute_ref`` selects whose credential metadata is evaluated (for example
+    a credential accepted by a service). It never rewrites the traversed edge's
+    source identity: principal/resource graph constraints are always proven from
+    the exact source/target subjects on the authority edge.
     """
     raw = edge.get("constraints")
     if raw is not None and not isinstance(raw, Mapping):
@@ -145,7 +144,7 @@ def evaluate_exact_edge_constraints(
     return resolve_graph_context_verdict(
         constraints,
         verdict,
-        source_ref=source_ref if attribute_ref is None else str(attribute_ref),
+        source_ref=source_ref,
         target_ref=target_ref,
         source_subject=source_subject,
         target_subject=target_subject,
