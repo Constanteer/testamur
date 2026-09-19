@@ -36,7 +36,7 @@ def graph_context_constraints_satisfied(
 ) -> tuple[bool, list[str], list[str]]:
     """Resolve constraints provable from the exact traversed authority edge.
 
-    Only typed aliases plus the canonical subject refs participate. Generic labels,
+    Only typed aliases plus canonical subject refs participate. Generic labels,
     names, or IDs are deliberately excluded: coincidental metadata must not become
     authorization evidence. Runtime context (IP/zone/device/session/time/provider
     conditions) remains unresolved until a caller supplies exact evidence for it.
@@ -55,29 +55,63 @@ def graph_context_constraints_satisfied(
 
     if "resource" in remaining:
         required = _values(constraints.get("resource"))
-        if required and not required.intersection(target_resources):
+        if not required:
+            reasons.add("resource_constraint_missing_value")
+        elif not required.intersection(target_resources):
             reasons.add("resource_mismatch")
-        if required:
-            remaining.discard("resource")
+        remaining.discard("resource")
 
     if "resource_pattern" in remaining:
         patterns = _values(constraints.get("resource_pattern"))
-        if patterns:
-            if not any(fnmatchcase(value, pattern) for value in target_resources for pattern in patterns):
-                reasons.add("resource_pattern_mismatch")
-            remaining.discard("resource_pattern")
+        if not patterns:
+            reasons.add("resource_pattern_constraint_missing_value")
+        elif not any(fnmatchcase(value, pattern) for value in target_resources for pattern in patterns):
+            reasons.add("resource_pattern_mismatch")
+        remaining.discard("resource_pattern")
 
     principal_keys = ("principal", "principals", "principal_ref", "principal_refs")
-    if remaining.intersection(principal_keys):
+    pending_principal_keys = remaining.intersection(principal_keys)
+    if pending_principal_keys:
         required: set[str] = set()
         for key in principal_keys:
             required.update(_values(constraints.get(key)))
-        if required and not required.intersection(source_principals):
+        if not required:
+            reasons.add("principal_constraint_missing_value")
+        elif not required.intersection(source_principals):
             reasons.add("principal_mismatch")
-        if required:
-            remaining.difference_update(principal_keys)
+        remaining.difference_update(principal_keys)
 
     return not reasons and not remaining, sorted(reasons), sorted(remaining)
 
 
-__all__ = ["graph_context_constraints_satisfied"]
+def resolve_graph_context_verdict(
+    constraints: Mapping[str, Any],
+    credential_verdict: tuple[bool, Sequence[str], Sequence[str]],
+    *,
+    source_ref: str,
+    target_ref: str,
+    source_subject: Mapping[str, Any] | None = None,
+    target_subject: Mapping[str, Any] | None = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Refine a credential/metadata verdict with exact graph-context evidence.
+
+    This function is deliberately monotone: graph context may discharge only
+    unresolved graph constraints. It can never erase a credential failure such as
+    expiry, revocation, audience/scope mismatch, approval, or MFA. This prevents a
+    matching graph target from laundering an otherwise invalid credential into
+    exercisable authority.
+    """
+    credential_ok, credential_reasons, unresolved = credential_verdict
+    graph_ok, graph_reasons, remaining = graph_context_constraints_satisfied(
+        constraints,
+        source_ref=source_ref,
+        target_ref=target_ref,
+        source_subject=source_subject,
+        target_subject=target_subject,
+        unresolved=unresolved,
+    )
+    reasons = sorted({str(item) for item in credential_reasons} | set(graph_reasons))
+    return bool(credential_ok and graph_ok), reasons, remaining
+
+
+__all__ = ["graph_context_constraints_satisfied", "resolve_graph_context_verdict"]
