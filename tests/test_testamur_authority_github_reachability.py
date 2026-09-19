@@ -38,7 +38,7 @@ def test_selected_installation_only_reaches_explicit_repositories(tmp_path):
     assert blocked
     assert blocked[0]["reasons"] == ["repository_scope_outside_delegation"]
     assert blocked[0]["candidate_capabilities"] == [action_cap("repo:b")]
-    assert blocked[0]["inherited_capability_budget"][0]["constraints"]["repository_ref"] == "repo:a"
+    assert blocked[0]["inherited_capability_budget"][0]["constraints"]["repository_refs"] == ["repo:a"]
 
 
 def test_rejection_diagnostics_preserve_exact_repository_budget(tmp_path):
