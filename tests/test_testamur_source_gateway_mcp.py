@@ -42,6 +42,10 @@ def test_modern_discovery_and_tools_list():
         "testamur.source_status",
         "testamur.revalidate",
         "testamur.watch_refresh",
+        "testamur.project_supply_chain",
+        "testamur.project_scan",
+        "testamur.project_supply_chain_diff",
+        "testamur.project_advisories",
     ]
 
 
@@ -172,3 +176,64 @@ def test_unknown_tool_is_invalid_params():
 
 def test_notification_has_no_response():
     assert handle_request({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}) is None
+
+
+def test_project_supply_chain_mcp_tools_use_canonical_project_state(monkeypatch, tmp_path):
+    database = tmp_path / "evidence.db"
+    monkeypatch.setenv("TESTAMUR_DB", str(database))
+
+    from testamur.product_service import TestamurProductService
+
+    service = TestamurProductService.integrated(database)
+    project = service.projects.create_project(name="mcp-demo")
+    root = tmp_path / "repo"
+    root.mkdir()
+    requirements = root / "requirements.txt"
+    requirements.write_text("requests==2.32.4\n", encoding="utf-8")
+    service.projects.bind_repository(project["project_id"], locator=str(root))
+
+    scanned = handle_request(
+        _modern(
+            "tools/call",
+            name="testamur.project_scan",
+            arguments={"project_ref": project["project_id"]},
+        )
+    )
+    assert scanned["result"]["isError"] is False
+    first = scanned["result"]["structuredContent"]
+    assert first["dependency_count"] == 1
+    assert first["repository_binding_key"] == "primary"
+
+    inspected = handle_request(
+        _modern(
+            "tools/call",
+            name="testamur.project_supply_chain",
+            arguments={"project_ref": project["project_id"]},
+        )
+    )
+    supply = inspected["result"]["structuredContent"]["supply_chain"]
+    assert supply["dependency_count"] == 1
+    assert supply["dependencies"][0]["name"] == "requests"
+
+    requirements.write_text("requests==2.32.5\nflask==3.1.2\n", encoding="utf-8")
+    second_response = handle_request(
+        _modern(
+            "tools/call",
+            name="testamur.project_scan",
+            arguments={"project_ref": project["project_id"]},
+        )
+    )
+    second = second_response["result"]["structuredContent"]
+    assert second["scan_revision_id"] != first["scan_revision_id"]
+
+    diff_response = handle_request(
+        _modern(
+            "tools/call",
+            name="testamur.project_supply_chain_diff",
+            arguments={"project_ref": project["project_id"]},
+        )
+    )
+    diff = diff_response["result"]["structuredContent"]
+    assert diff["counts"]["dependencies_added"] == 1
+    assert diff["counts"]["dependencies_changed"] == 1
+    assert diff["semantics"]["dependency_change_implies_vulnerable"] is False
