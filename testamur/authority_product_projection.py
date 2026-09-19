@@ -15,12 +15,15 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     """
     blocked = list(result.get("blocked_transitions") or [])
     reason_counts: Counter[str] = Counter()
+    failed_counts: Counter[str] = Counter()
     unresolved_counts: Counter[str] = Counter()
     projected: list[dict[str, Any]] = []
     for item in blocked:
         reasons = sorted({str(value) for value in item.get("reasons") or []})
+        failed = sorted({str(value) for value in item.get("failed_constraints") or []})
         unresolved = sorted({str(value) for value in item.get("unresolved_constraints") or []})
         reason_counts.update(reasons)
+        failed_counts.update(failed)
         unresolved_counts.update(unresolved)
         projected.append(
             {
@@ -30,6 +33,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "relation_type": item.get("relation_type"),
                 "reachability_class": item.get("reachability_class"),
                 "reasons": reasons,
+                "failed_constraints": failed,
                 "unresolved_constraints": unresolved,
                 "path_edge_ids": list(item.get("path_edge_ids") or []),
                 "supporting_edge_ids": list(item.get("supporting_edge_ids") or []),
@@ -46,6 +50,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
         "schema_version": "testamur.authority-product-diagnostics.v1",
         "blocked_transitions": projected,
         "blocked_reason_counts": dict(sorted(reason_counts.items())),
+        "failed_constraint_counts": dict(sorted(failed_counts.items())),
         "unresolved_constraint_counts": dict(sorted(unresolved_counts.items())),
         "trust_boundary_refs": sorted({str(value) for value in result.get("trust_boundary_refs") or []}),
         "trust_boundary_crossings": crossings,
