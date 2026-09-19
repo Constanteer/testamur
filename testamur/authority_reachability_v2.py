@@ -7,7 +7,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from .authority import AuthorityRelationType, AuthoritySubjectKind, TestamurAuthorityStore
 from .authority_boundaries import boundary_refs_from_crossings, project_trust_boundary_crossings
-from .authority_credentials import credential_constraints_satisfied
+from .authority_graph_constraints import evaluate_exact_edge_constraints
 from .authority_projection import capability_identity
 from .authority_reachability_policy import (
     action_result_identity,
@@ -108,12 +108,17 @@ def _declared_only(edge: Mapping[str, Any]) -> bool:
 
 
 def _constraints(store: TestamurAuthorityStore, edge: Mapping[str, Any], at: datetime, *, attribute_ref: str | None = None) -> tuple[bool, list[str], list[str]]:
-    raw = edge.get("constraints")
-    if raw is not None and not isinstance(raw, Mapping):
-        return False, [], ["constraints"]
-    constraints = dict(raw or {})
-    ref = attribute_ref or str(edge.get("source_ref") or "")
-    return credential_constraints_satisfied(_attrs(store, ref), constraints, as_of=at)
+    source_ref = str(edge.get("source_ref") or "")
+    target_ref = str(edge.get("target_ref") or "")
+    credential_ref = attribute_ref or source_ref
+    return evaluate_exact_edge_constraints(
+        edge,
+        credential_attributes=_attrs(store, credential_ref),
+        source_subject=_subject(store, source_ref),
+        target_subject=_subject(store, target_ref),
+        attribute_ref=attribute_ref,
+        as_of=at,
+    )
 
 
 def _acceptance(store: TestamurAuthorityStore, edge: Mapping[str, Any], at: datetime) -> tuple[bool, list[str], list[str], list[str], bool]:
