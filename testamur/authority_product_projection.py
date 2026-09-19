@@ -7,9 +7,9 @@ from typing import Any, Mapping
 def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     """Stable product projection for authority reachability diagnostics.
 
-    This projection is deliberately descriptive.  It never converts connectivity,
+    This projection is deliberately descriptive. It never converts connectivity,
     lineage, reliance, or affectedness into authority and it never treats a blocked
-    transition as a weaker permission.  Exact path/support edge IDs are retained so
+    transition as a weaker permission. Exact path/support edge IDs are retained so
     a CLI or Web client can request the canonical explanation without reconstructing
     evidence from graph adjacency.
     """
@@ -63,4 +63,56 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["project_authority_diagnostics"]
+def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a canonical reachability/blast result without weakening semantics.
+
+    The raw engine result remains the authority source of truth. This view adds
+    deterministic diagnostics and summary counts for ProductService/CLI/Web while
+    retaining exact constrained capabilities and exact path/support evidence.
+    """
+    schema = str(result.get("schema_version") or "")
+    if schema not in {
+        "testamur.authority-reachability.v1",
+        "testamur.authority-blast-radius.v1",
+    }:
+        raise ValueError(f"unsupported authority result schema: {schema or '<missing>'}")
+
+    reachable = [dict(value) for value in result.get("reachable_subjects") or []]
+    actions = [dict(value) for value in result.get("actionable_capabilities") or []]
+    diagnostics = project_authority_diagnostics(result)
+
+    # Do not collapse constrained capabilities by namespace/action/resource here.
+    # Audience/scope/tenant/binding identity is owned by the canonical engine and
+    # every emitted action remains independently visible to product clients.
+    return {
+        "schema_version": "testamur.authority-product-result.v1",
+        "engine_schema_version": schema,
+        "starting_subject_ref": result.get("starting_subject_ref"),
+        "compromised_refs": list(result.get("compromised_refs") or []),
+        "compromise_model": result.get("compromise_model"),
+        "as_of": result.get("as_of"),
+        "reachable_subjects": reachable,
+        "actionable_capabilities": actions,
+        "diagnostics": diagnostics,
+        "summary": {
+            "reachable_subject_count": len(reachable),
+            "actionable_capability_count": len(actions),
+            "blocked_transition_count": len(diagnostics["blocked_transitions"]),
+            "trust_boundary_crossing_count": len(diagnostics["trust_boundary_crossings"]),
+            "truncated": bool(result.get("truncated")),
+            "truncation_reasons": list(result.get("truncation_reasons") or []),
+        },
+        "semantics": {
+            "authority_source_of_truth": "canonical_engine_result",
+            "reachable_does_not_mean_exercised": True,
+            "blast_radius_is_potential_authority": schema.endswith("blast-radius.v1"),
+            "blocked_is_not_partial_authority": True,
+            "connectivity_is_not_authorization": True,
+            "lineage_is_not_authority": True,
+            "affectedness_does_not_seed_compromise": True,
+            "capability_constraints_are_not_collapsed": True,
+        },
+    }
+
+
+__all__ = ["project_authority_diagnostics", "project_authority_result"]
