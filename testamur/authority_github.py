@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .authority import AuthoritySubjectKind, TestamurAuthorityStore
 from .authority_import import exact_evidence, record_connector_delegation
@@ -22,11 +22,9 @@ def github_permission_capabilities(
 ) -> list[dict[str, Any]]:
     """Translate an observed GitHub App/OAuth permission set without widening it.
 
-    ``permissions`` is expected to be the exact provider permission object (for
-    example ``contents=read`` or ``pull_requests=write``). Unknown levels fail
-    closed. Repository selection is retained as a constraint; absence of a
-    repository list is represented as unresolved rather than interpreted as all
-    repositories.
+    ``permissions`` is the exact provider permission object. Unknown levels fail
+    closed. Repository selection is retained as a constraint; absence of a repository
+    list is unresolved rather than interpreted as all repositories.
     """
     if not isinstance(permissions, Mapping) or not permissions:
         raise ValueError("GitHub connector permissions must be a non-empty object")
@@ -83,19 +81,13 @@ def record_github_connector_permissions(
 ) -> dict[str, Any]:
     """Record exact GitHub connector delegation from one pinned provider snapshot.
 
-    Merely observing an installation never creates authority: this function requires
-    a non-empty provider permission object and exact revision-pinned evidence.
-    Repository selection remains an explicit capability constraint.
+    Merely observing an installation never creates authority. All permission and
+    evidence inputs are validated before the store is mutated, so malformed provider
+    data cannot leave a connector subject that appears authoritative by adjacency.
     """
     connector = str(connector_ref).strip()
     if not connector:
         raise ValueError("connector_ref must be a non-empty string")
-    store.record_subject(
-        AuthoritySubjectKind.CONNECTOR,
-        label=f"GitHub connector {installation_id}",
-        subject_ref=connector,
-        attributes={"provider": "github", "installation_id": str(installation_id)},
-    )
     capabilities = github_permission_capabilities(
         permissions,
         installation_id=installation_id,
@@ -108,6 +100,12 @@ def record_github_connector_permissions(
         analyzer=analyzer,
         analyzer_version=analyzer_version,
         observed_at=observed_at,
+    )
+    store.record_subject(
+        AuthoritySubjectKind.CONNECTOR,
+        label=f"GitHub connector {installation_id}",
+        subject_ref=connector,
+        attributes={"provider": "github", "installation_id": str(installation_id)},
     )
     return record_connector_delegation(
         store,
