@@ -9,9 +9,9 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
 
     This projection is deliberately descriptive. It never converts connectivity,
     lineage, reliance, or affectedness into authority and it never treats a blocked
-    transition as a weaker permission. Exact path/support edge IDs are retained so
-    a CLI or Web client can request the canonical explanation without reconstructing
-    evidence from graph adjacency.
+    transition as a weaker permission. Exact path/support edge IDs and exact denied
+    capability budgets are retained so clients never reconstruct permissions from
+    graph adjacency.
     """
     blocked = list(result.get("blocked_transitions") or [])
     reason_counts: Counter[str] = Counter()
@@ -34,18 +34,14 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "path_edge_ids": list(item.get("path_edge_ids") or []),
                 "supporting_edge_ids": list(item.get("supporting_edge_ids") or []),
                 "evidence_state": item.get("evidence_state"),
+                "candidate_capabilities": [dict(value) for value in item.get("candidate_capabilities") or [] if isinstance(value, Mapping)],
+                "inherited_capability_budget": [dict(value) for value in item.get("inherited_capability_budget") or [] if isinstance(value, Mapping)],
             }
         )
     projected.sort(key=lambda item: (str(item["edge_id"] or ""), str(item["target_ref"] or "")))
 
     crossings = [dict(value) for value in result.get("trust_boundary_crossings") or []]
-    crossings.sort(
-        key=lambda item: (
-            int(item.get("path_position") or 0),
-            str(item.get("edge_id") or ""),
-            str(item.get("boundary_ref") or ""),
-        )
-    )
+    crossings.sort(key=lambda item: (int(item.get("path_position") or 0), str(item.get("edge_id") or ""), str(item.get("boundary_ref") or "")))
     return {
         "schema_version": "testamur.authority-product-diagnostics.v1",
         "blocked_transitions": projected,
@@ -59,31 +55,20 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
             "supporting_evidence_is_not_path_traversal": True,
             "connectivity_is_not_authorization": True,
             "lineage_is_not_authority": True,
+            "denied_budget_is_diagnostic_not_authority": True,
         },
     }
 
 
 def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
-    """Project a canonical reachability/blast result without weakening semantics.
-
-    The raw engine result remains the authority source of truth. This view adds
-    deterministic diagnostics and summary counts for ProductService/CLI/Web while
-    retaining exact constrained capabilities and exact path/support evidence.
-    """
+    """Project a canonical reachability/blast result without weakening semantics."""
     schema = str(result.get("schema_version") or "")
-    if schema not in {
-        "testamur.authority-reachability.v1",
-        "testamur.authority-blast-radius.v1",
-    }:
+    if schema not in {"testamur.authority-reachability.v1", "testamur.authority-blast-radius.v1"}:
         raise ValueError(f"unsupported authority result schema: {schema or '<missing>'}")
 
     reachable = [dict(value) for value in result.get("reachable_subjects") or []]
     actions = [dict(value) for value in result.get("actionable_capabilities") or []]
     diagnostics = project_authority_diagnostics(result)
-
-    # Do not collapse constrained capabilities by namespace/action/resource here.
-    # Audience/scope/tenant/binding identity is owned by the canonical engine and
-    # every emitted action remains independently visible to product clients.
     return {
         "schema_version": "testamur.authority-product-result.v1",
         "engine_schema_version": schema,
