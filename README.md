@@ -4,6 +4,8 @@ Testamur is a local-first provenance and revalidation layer for inspectable tech
 
 It records the exact source revisions a workflow saw or depended on, captures observable work-session events, preserves explicit reliance decisions, and helps identify what may need review when upstream sources change.
 
+**New here? Start with the [five-minute quickstart](docs/TESTAMUR_5_MINUTE_QUICKSTART.md).** It uses an existing repository to show the Source → Revision → Compare → Impact → Revalidation mental model without requiring familiarity with Testamur's internal object names.
+
 Testamur deliberately keeps these distinctions intact:
 
 ```text
@@ -11,6 +13,7 @@ recorded != verified
 fetched != relied
 changed != invalid
 stale != false
+EXPOSED_TO_MODEL != RELIED
 lineage != affectedness verdict
 ```
 
@@ -69,10 +72,13 @@ A source being fetched or shown to an agent is evidence of exposure, not automat
 
 ## Software supply-chain import
 
-Scan a repository's dependency manifests and lockfiles into Testamur:
+For a first run against an existing repository, use the project workflow described in the five-minute quickstart:
 
 ```bash
-testamur project import .
+testamur product project import . --name demo-project
+testamur product project bind-repo demo-project .
+testamur product project scan demo-project
+testamur product project supply-chain demo-project
 ```
 
 The initial importer recognizes pinned Python requirements, `uv.lock`, `poetry.lock`, npm `package-lock.json` / `npm-shrinkwrap.json`, `Cargo.lock`, and `go.sum`. It records exact manifest digests, canonical package/component identities, dependency observations and durable project scan relations.
@@ -112,9 +118,12 @@ Hosted account, billing and multi-tenant service infrastructure is intentionally
 
 Start with:
 
+- [Five-minute quickstart](docs/TESTAMUR_5_MINUTE_QUICKSTART.md)
+- [Launch walkthrough](docs/TESTAMUR_LAUNCH_WALKTHROUGH.md)
 - [Architecture](ARCHITECTURE.md)
 - [Quick launch](QUICK_LAUNCH.md)
 - [Product API](docs/TESTAMUR_PRODUCT_API.md)
+- [Agent protocol](docs/TESTAMUR_AGENT_PROTOCOL.md)
 - [Agent workflow](docs/TESTAMUR_AGENT_WORKFLOW.md)
 - [Temporal model](docs/TESTAMUR_TEMPORAL_MODEL.md)
 - [Lineage engine](docs/TESTAMUR_LINEAGE_ENGINE.md)
