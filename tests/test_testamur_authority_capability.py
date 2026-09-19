@@ -139,7 +139,6 @@ def test_plural_binding_aliases_cannot_be_dropped():
 
 def test_expiry_attenuation_uses_timestamps_not_lexical_order():
     parent = cap("repo:a", expires_at="2026-09-18T12:00:00Z")
-    # Same instant, different offset: valid attenuation.
     assert capability_is_attenuation(
         cap("repo:a", expires_at="2026-09-18T20:00:00+08:00"), parent
     )
@@ -162,3 +161,100 @@ def test_budget_projection_preserves_constraints_for_product_surfaces():
         cap("repo:a", approval_required=True, scopes=["contents:write"])
     ]
     assert project_budget(None) is None
+
+
+def test_selected_repository_scope_can_only_narrow_to_exact_subset():
+    parent = cap(
+        "contents",
+        provider="github",
+        installation_id="42",
+        repository_selection="selected",
+        repository_refs=["repo:a", "repo:b"],
+    )
+    assert capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="selected",
+            repository_ref="repo:a",
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="selected",
+            repository_ref="repo:c",
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="all",
+        ),
+        parent,
+    )
+
+
+def test_explicit_all_repository_scope_may_attenuate_to_selected_repository():
+    parent = cap(
+        "contents",
+        provider="github",
+        installation_id="42",
+        repository_selection="all",
+    )
+    assert capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="selected",
+            repository_ref="repo:any",
+        ),
+        parent,
+    )
+    assert capability_is_attenuation(parent, parent)
+
+
+def test_unresolved_repository_scope_is_not_a_wildcard():
+    parent = cap(
+        "contents",
+        provider="github",
+        installation_id="42",
+        repository_selection="unresolved",
+    )
+    assert capability_is_attenuation(parent, parent)
+    assert not capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="selected",
+            repository_ref="repo:a",
+        ),
+        parent,
+    )
+    assert not capability_is_attenuation(
+        cap(
+            "contents",
+            provider="github",
+            installation_id="42",
+            repository_selection="all",
+        ),
+        parent,
+    )
+
+
+def test_malformed_repository_selection_fails_closed_at_algebra_boundary():
+    malformed_selected = cap("contents", repository_selection="selected")
+    malformed_all = cap("contents", repository_selection="all", repository_ref="repo:a")
+    valid_all = cap("contents", repository_selection="all")
+    assert not capability_allowed(malformed_selected, None)
+    assert not capability_allowed(malformed_all, None)
+    assert not capability_is_attenuation(malformed_selected, valid_all)
