@@ -1,8 +1,10 @@
 from testamur.authority_reachability_policy import (
+    action_result_identity,
     downstream_budget,
     exercisable_capabilities,
     implicit_capability,
     project_downstream_budget,
+    traversal_state_identity,
 )
 
 
@@ -68,3 +70,41 @@ def test_empty_delegation_is_explicitly_empty_not_unrestricted():
         ),
         budget,
     ) == []
+
+
+def test_action_identity_does_not_collapse_different_scopes():
+    base = {
+        "namespace": "github",
+        "action": "contents:read",
+        "resource": "repo:constanteer/testamur",
+    }
+    narrow = {**base, "constraints": {"required_scopes": ["contents:read"]}}
+    broader = {
+        **base,
+        "constraints": {"required_scopes": ["contents:read", "metadata:read"]},
+    }
+    assert action_result_identity("repo", narrow, ["edge:1"]) != action_result_identity(
+        "repo", broader, ["edge:1"]
+    )
+
+
+def test_traversal_state_identity_keeps_delegation_budget_and_empty_distinct():
+    capability = {
+        "namespace": "github",
+        "action": "contents:read",
+        "resource": "repo:constanteer/testamur",
+        "constraints": {
+            "required_audience": ["github-api"],
+            "tenant_id": ["constanteer"],
+        },
+    }
+    constrained = (capability,)
+    unrestricted = traversal_state_identity("connector:x", "CONTROLLED", None, ["e1"])
+    empty = traversal_state_identity("connector:x", "CONTROLLED", (), ["e1"])
+    delegated = traversal_state_identity("connector:x", "CONTROLLED", constrained, ["e1"])
+
+    assert unrestricted != empty
+    assert empty != delegated
+    assert delegated[2] is not None
+    assert "required_audience" in delegated[2][0]
+    assert "tenant_id" in delegated[2][0]
