@@ -17,7 +17,7 @@ from .project_review_surface import project_with_advisory_reviews
 
 WEB_ROOT = Path(__file__).with_name("web")
 
-_STATIC_ASSETS = {"index.html", "app.js", "styles.css"}
+_STATIC_ASSETS = {"index.html", "app.js", "styles.css", "advisory-review-ui.js"}
 _SPA_PREFIXES = {"app", "object", "compare", "impact", "temporal", "projects", "explore", "monitoring", "learn", "docs", "integrations", "quickstart", "demo", "status"}
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
