@@ -37,6 +37,7 @@ def test_selected_installation_only_reaches_explicit_repositories(tmp_path):
     blocked = [item for item in result["blocked_transitions"] if item["target_ref"] == "repo:b"]
     assert blocked
     assert blocked[0]["reasons"] == ["repository_scope_outside_delegation"]
+    assert blocked[0]["failed_constraints"] == ["repository_selection"]
     assert blocked[0]["candidate_capabilities"] == [action_cap("repo:b")]
     assert blocked[0]["inherited_capability_budget"][0]["constraints"]["repository_refs"] == ["repo:a"]
 
@@ -49,6 +50,7 @@ def test_rejection_diagnostics_preserve_exact_repository_budget(tmp_path):
     diagnostic = capability_rejection_diagnostics(candidate, inherited)
     assert diagnostic is not None
     assert diagnostic["reasons"] == ["repository_scope_outside_delegation"]
+    assert diagnostic["failed_constraints"] == ["repository_selection"]
     assert diagnostic["unresolved_constraints"] == []
     assert diagnostic["candidate_capabilities"] == [action_cap("repo:b")]
     assert diagnostic["inherited_capability_budget"] == list(inherited)
@@ -60,6 +62,7 @@ def test_unresolved_repository_budget_is_reported_as_unresolved(tmp_path):
     assert targets == set()
     blocked = [item for item in result["blocked_transitions"] if item["target_ref"] == "repo:a"]
     assert blocked[0]["reasons"] == ["repository_selection_unresolved"]
+    assert blocked[0]["failed_constraints"] == ["repository_selection"]
     assert blocked[0]["unresolved_constraints"] == ["repository_selection"]
 
 
@@ -74,3 +77,73 @@ def test_explicit_all_installation_scope_can_attenuate_to_repository_action(tmp_
     store = build_graph(tmp_path, repository_selection="all")
     _result, targets = reachable_targets(store)
     assert targets == {"repo:a", "repo:b"}
+
+
+def _diagnose_constraints(parent_constraints, candidate_constraints):
+    parent = {"namespace": "oauth", "action": "invoke", "resource": "svc:api", "constraints": parent_constraints}
+    candidate = {"namespace": "oauth", "action": "invoke", "resource": "svc:api", "constraints": candidate_constraints}
+    edge = {"capabilities": [candidate]}
+    return capability_rejection_diagnostics(edge, (parent,))
+
+
+def test_token_audience_scope_issuer_and_tenant_denials_are_exact():
+    diagnostic = _diagnose_constraints(
+        {
+            "audiences": ["api://testamur"],
+            "required_scopes": ["project:read", "project:write"],
+            "required_issuer": ["https://issuer.example"],
+            "tenant_id": ["tenant:a"],
+        },
+        {
+            "audience": ["api://other"],
+            "scope": ["project:admin"],
+            "issuer": ["https://other-issuer.example"],
+            "tenant": ["tenant:b"],
+        },
+    )
+    assert diagnostic is not None
+    assert diagnostic["reasons"] == [
+        "audience_outside_delegation",
+        "issuer_outside_delegation",
+        "scope_outside_delegation",
+        "tenant_outside_delegation",
+    ]
+    assert diagnostic["failed_constraints"] == ["audience", "issuer", "scope", "tenant"]
+
+
+def test_runtime_binding_and_gate_denials_name_exact_constraints():
+    diagnostic = _diagnose_constraints(
+        {
+            "device_binding": ["device:trusted"],
+            "session_binding": ["session:trusted"],
+            "mfa_required": True,
+            "human_confirmation_required": True,
+        },
+        {
+            "device_binding": ["device:other"],
+            "session_binding": ["session:other"],
+        },
+    )
+    assert diagnostic is not None
+    assert diagnostic["reasons"] == [
+        "device_binding_outside_delegation",
+        "human_confirmation_required_not_preserved",
+        "mfa_required_not_preserved",
+        "session_binding_outside_delegation",
+    ]
+    assert diagnostic["failed_constraints"] == [
+        "device_binding",
+        "human_confirmation_required",
+        "mfa_required",
+        "session_binding",
+    ]
+
+
+def test_expiry_and_provider_specific_constraint_denials_remain_fail_closed():
+    diagnostic = _diagnose_constraints(
+        {"expires_at": "2026-09-20T12:00:00Z", "provider_condition": {"branch": "main"}},
+        {"expires_at": "2026-09-20T12:00:01Z", "provider_condition": {"branch": "dev"}},
+    )
+    assert diagnostic is not None
+    assert diagnostic["reasons"] == ["expiry_outside_delegation", "provider_constraint_mismatch"]
+    assert diagnostic["failed_constraints"] == ["expires_at", "provider_condition"]
