@@ -51,6 +51,19 @@ def test_principal_constraint_matches_exact_source_identity() -> None:
     assert unresolved == []
 
 
+def test_generic_name_or_id_is_not_authorization_evidence() -> None:
+    ok, reasons, unresolved = graph_context_constraints_satisfied(
+        {"resource": "repo:Constanteer/testamur"},
+        source_ref="connector:github",
+        target_ref="resource:opaque-17",
+        target_subject={"name": "repo:Constanteer/testamur", "attributes": {"id": "repo:Constanteer/testamur"}},
+        unresolved=["resource"],
+    )
+    assert ok is False
+    assert reasons == ["resource_mismatch"]
+    assert unresolved == []
+
+
 def test_runtime_context_remains_fail_closed_without_evidence() -> None:
     ok, reasons, unresolved = graph_context_constraints_satisfied(
         {"network_zone": "corp", "device_binding": "managed"},
