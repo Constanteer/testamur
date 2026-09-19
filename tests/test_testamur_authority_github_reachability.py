@@ -11,19 +11,7 @@ def evidence(ref: str):
 
 
 def action_cap(repository_ref: str):
-    return {
-        "namespace": "github",
-        "action": "write",
-        "resource": "contents",
-        "constraints": {
-            "provider": "github",
-            "installation_id": "42",
-            "provider_permission": "contents",
-            "provider_level": "write",
-            "repository_selection": "selected",
-            "repository_ref": repository_ref,
-        },
-    }
+    return {"namespace": "github", "action": "write", "resource": "contents", "constraints": {"provider": "github", "installation_id": "42", "provider_permission": "contents", "provider_level": "write", "repository_selection": "selected", "repository_ref": repository_ref}}
 
 
 def build_graph(tmp_path, *, repository_selection=None, repository_refs=None):
@@ -31,66 +19,32 @@ def build_graph(tmp_path, *, repository_selection=None, repository_refs=None):
     store.record_subject(AuthoritySubjectKind.SESSION, label="session", subject_ref="session:user")
     for ref in ("repo:a", "repo:b"):
         store.record_subject(AuthoritySubjectKind.REPOSITORY, label=ref, subject_ref=ref)
-    record_github_connector_permissions(
-        store,
-        delegator_ref="session:user",
-        connector_ref="connector:github:42",
-        installation_id="42",
-        permissions={"contents": "write"},
-        repository_selection=repository_selection,
-        repository_refs=repository_refs,
-        evidence_ref="github-installation:42",
-        evidence_revision="etag:permissions",
-    )
+    record_github_connector_permissions(store, delegator_ref="session:user", connector_ref="connector:github:42", installation_id="42", permissions={"contents": "write"}, repository_selection=repository_selection, repository_refs=repository_refs, evidence_ref="github-installation:42", evidence_revision="etag:permissions")
     for ref in ("repo:a", "repo:b"):
-        store.record_edge(
-            "connector:github:42",
-            AuthorityRelationType.HAS_CAPABILITY,
-            ref,
-            capabilities=[action_cap(ref)],
-            evidence=evidence(f"github-action:{ref}"),
-        )
+        store.record_edge("connector:github:42", AuthorityRelationType.HAS_CAPABILITY, ref, capabilities=[action_cap(ref)], evidence=evidence(f"github-action:{ref}"))
     return store
 
 
 def reachable_targets(store):
-    result = authority_reachability(
-        store,
-        "session:user",
-        compromise_model=CompromiseModel.FULL_SUBJECT_COMPROMISE,
-    )
+    result = authority_reachability(store, "session:user", compromise_model=CompromiseModel.FULL_SUBJECT_COMPROMISE)
     return result, {item["target_ref"] for item in result["actionable_capabilities"]}
 
 
 def test_selected_installation_only_reaches_explicit_repositories(tmp_path):
-    store = build_graph(
-        tmp_path,
-        repository_selection="selected",
-        repository_refs=["repo:a"],
-    )
+    store = build_graph(tmp_path, repository_selection="selected", repository_refs=["repo:a"])
     result, targets = reachable_targets(store)
     assert targets == {"repo:a"}
     blocked = [item for item in result["blocked_transitions"] if item["target_ref"] == "repo:b"]
     assert blocked
-    assert blocked[0]["reasons"] == ["missing_explicit_or_authorized_capability"]
+    assert blocked[0]["reasons"] == ["repository_scope_outside_delegation"]
+    assert blocked[0]["candidate_capabilities"] == [action_cap("repo:b")]
+    assert blocked[0]["inherited_capability_budget"][0]["constraints"]["repository_ref"] == "repo:a"
 
 
 def test_rejection_diagnostics_preserve_exact_repository_budget(tmp_path):
-    store = build_graph(
-        tmp_path,
-        repository_selection="selected",
-        repository_refs=["repo:a"],
-    )
-    delegation = store.list_edges(
-        source_ref="session:user",
-        target_ref="connector:github:42",
-        relation_type=AuthorityRelationType.DELEGATES,
-    )[0]
-    candidate = store.list_edges(
-        source_ref="connector:github:42",
-        target_ref="repo:b",
-        relation_type=AuthorityRelationType.HAS_CAPABILITY,
-    )[0]
+    store = build_graph(tmp_path, repository_selection="selected", repository_refs=["repo:a"])
+    delegation = store.list_edges(source_ref="session:user", target_ref="connector:github:42", relation_type=AuthorityRelationType.DELEGATES)[0]
+    candidate = store.list_edges(source_ref="connector:github:42", target_ref="repo:b", relation_type=AuthorityRelationType.HAS_CAPABILITY)[0]
     inherited = tuple(delegation["capabilities"])
     diagnostic = capability_rejection_diagnostics(candidate, inherited)
     assert diagnostic is not None
@@ -102,20 +56,11 @@ def test_rejection_diagnostics_preserve_exact_repository_budget(tmp_path):
 
 def test_unresolved_repository_budget_is_reported_as_unresolved(tmp_path):
     store = build_graph(tmp_path)
-    delegation = store.list_edges(
-        source_ref="session:user",
-        target_ref="connector:github:42",
-        relation_type=AuthorityRelationType.DELEGATES,
-    )[0]
-    candidate = store.list_edges(
-        source_ref="connector:github:42",
-        target_ref="repo:a",
-        relation_type=AuthorityRelationType.HAS_CAPABILITY,
-    )[0]
-    diagnostic = capability_rejection_diagnostics(candidate, tuple(delegation["capabilities"]))
-    assert diagnostic is not None
-    assert diagnostic["reasons"] == ["repository_selection_unresolved"]
-    assert diagnostic["unresolved_constraints"] == ["repository_selection"]
+    result, targets = reachable_targets(store)
+    assert targets == set()
+    blocked = [item for item in result["blocked_transitions"] if item["target_ref"] == "repo:a"]
+    assert blocked[0]["reasons"] == ["repository_selection_unresolved"]
+    assert blocked[0]["unresolved_constraints"] == ["repository_selection"]
 
 
 def test_unresolved_installation_scope_cannot_authorize_repository_action(tmp_path):
