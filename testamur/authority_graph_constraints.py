@@ -16,10 +16,11 @@ def _values(value: Any) -> set[str]:
     return {text} if text else set()
 
 
-def _subject_values(ref: str, subject: Mapping[str, Any]) -> set[str]:
+def _typed_subject_values(ref: str, subject: Mapping[str, Any], keys: tuple[str, ...]) -> set[str]:
     values = {str(ref).strip()} if str(ref).strip() else set()
-    for container in (subject, subject.get("attributes") if isinstance(subject.get("attributes"), Mapping) else {}):
-        for key in ("resource", "resource_ref", "principal", "principal_ref", "name", "id"):
+    attributes = subject.get("attributes") if isinstance(subject.get("attributes"), Mapping) else {}
+    for container in (subject, attributes):
+        for key in keys:
             values.update(_values(container.get(key)))
     return values
 
@@ -33,24 +34,28 @@ def graph_context_constraints_satisfied(
     target_subject: Mapping[str, Any] | None = None,
     unresolved: Sequence[str] = (),
 ) -> tuple[bool, list[str], list[str]]:
-    """Resolve constraints that can be proven from the exact traversed graph edge.
+    """Resolve constraints provable from the exact traversed authority edge.
 
-    This evaluator is deliberately narrow. It resolves only resource/principal
-    constraints for which the traversal has an exact source/target subject. Runtime
-    context such as source IP, network zone, device/session binding, time windows,
-    and provider-specific conditions remains unresolved unless a future caller can
-    supply evidence for it. Connectivity never satisfies a permission constraint.
+    Only typed aliases plus the canonical subject refs participate. Generic labels,
+    names, or IDs are deliberately excluded: coincidental metadata must not become
+    authorization evidence. Runtime context (IP/zone/device/session/time/provider
+    conditions) remains unresolved until a caller supplies exact evidence for it.
+    Connectivity never satisfies a permission constraint.
     """
-    remaining = set(str(item) for item in unresolved)
+    remaining = {str(item) for item in unresolved}
     reasons: set[str] = set()
     source = source_subject or {}
     target = target_subject or {}
-    source_values = _subject_values(source_ref, source)
-    target_values = _subject_values(target_ref, target)
+    source_principals = _typed_subject_values(
+        source_ref, source, ("principal", "principals", "principal_ref", "principal_refs")
+    )
+    target_resources = _typed_subject_values(
+        target_ref, target, ("resource", "resources", "resource_ref", "resource_refs")
+    )
 
     if "resource" in remaining:
         required = _values(constraints.get("resource"))
-        if required and not required.intersection(target_values):
+        if required and not required.intersection(target_resources):
             reasons.add("resource_mismatch")
         if required:
             remaining.discard("resource")
@@ -58,7 +63,7 @@ def graph_context_constraints_satisfied(
     if "resource_pattern" in remaining:
         patterns = _values(constraints.get("resource_pattern"))
         if patterns:
-            if not any(fnmatchcase(value, pattern) for value in target_values for pattern in patterns):
+            if not any(fnmatchcase(value, pattern) for value in target_resources for pattern in patterns):
                 reasons.add("resource_pattern_mismatch")
             remaining.discard("resource_pattern")
 
@@ -67,7 +72,7 @@ def graph_context_constraints_satisfied(
         required: set[str] = set()
         for key in principal_keys:
             required.update(_values(constraints.get(key)))
-        if required and not required.intersection(source_values):
+        if required and not required.intersection(source_principals):
             reasons.add("principal_mismatch")
         if required:
             remaining.difference_update(principal_keys)
