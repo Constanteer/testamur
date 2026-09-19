@@ -70,8 +70,7 @@ def graph_context_constraints_satisfied(
         remaining.discard("resource_pattern")
 
     principal_keys = ("principal", "principals", "principal_ref", "principal_refs")
-    pending_principal_keys = remaining.intersection(principal_keys)
-    if pending_principal_keys:
+    if remaining.intersection(principal_keys):
         required: set[str] = set()
         for key in principal_keys:
             required.update(_values(constraints.get(key)))
@@ -93,16 +92,16 @@ def resolve_graph_context_verdict(
     source_subject: Mapping[str, Any] | None = None,
     target_subject: Mapping[str, Any] | None = None,
 ) -> tuple[bool, list[str], list[str]]:
-    """Refine a credential/metadata verdict with exact graph-context evidence.
+    """Refine a metadata verdict using evidence from the exact traversed edge.
 
-    This function is deliberately monotone: graph context may discharge only
-    unresolved graph constraints. It can never erase a credential failure such as
-    expiry, revocation, audience/scope mismatch, approval, or MFA. This prevents a
-    matching graph target from laundering an otherwise invalid credential into
-    exercisable authority.
+    A metadata evaluator reports ``ok=False`` both for hard failures and while a
+    graph-only key is unresolved. Exact graph evidence may discharge the latter,
+    but reasons already emitted by the metadata evaluator are immutable. Thus a
+    matching target can never launder expiry, revocation, audience/scope mismatch,
+    approval, MFA, or any other established failure into exercisable authority.
     """
-    credential_ok, credential_reasons, unresolved = credential_verdict
-    graph_ok, graph_reasons, remaining = graph_context_constraints_satisfied(
+    _credential_ok, credential_reasons, unresolved = credential_verdict
+    _graph_ok, graph_reasons, remaining = graph_context_constraints_satisfied(
         constraints,
         source_ref=source_ref,
         target_ref=target_ref,
@@ -111,7 +110,7 @@ def resolve_graph_context_verdict(
         unresolved=unresolved,
     )
     reasons = sorted({str(item) for item in credential_reasons} | set(graph_reasons))
-    return bool(credential_ok and graph_ok), reasons, remaining
+    return not reasons and not remaining, reasons, remaining
 
 
 __all__ = ["graph_context_constraints_satisfied", "resolve_graph_context_verdict"]
