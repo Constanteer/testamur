@@ -55,6 +55,7 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
                 )
                 if diagnostic is not None:
                     item["reasons"] = diagnostic["reasons"]
+                    item["failed_constraints"] = diagnostic["failed_constraints"]
                     item["unresolved_constraints"] = diagnostic["unresolved_constraints"]
                     item["candidate_capabilities"] = diagnostic["candidate_capabilities"]
                     item["inherited_capability_budget"] = diagnostic["inherited_capability_budget"]
