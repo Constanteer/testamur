@@ -24,6 +24,7 @@ def test_github_write_permission_does_not_become_generic_admin(tmp_path):
     }
     assert all(item["namespace"] == "github" for item in capabilities)
     assert all(item["constraints"]["installation_id"] == "42" for item in capabilities)
+    assert all(item["constraints"]["repository_selection"] == "selected" for item in capabilities)
     assert all(
         item["constraints"]["repository_refs"] == ["repo:Constanteer/testamur"]
         for item in capabilities
@@ -43,6 +44,33 @@ def test_github_missing_repository_selection_stays_unresolved():
     assert "repository_refs" not in capabilities[0]["constraints"]
 
 
+def test_github_explicit_all_repository_selection_is_not_unresolved():
+    capabilities = github_permission_capabilities(
+        {"contents": "read"}, installation_id="42", repository_selection="all"
+    )
+    constraints = capabilities[0]["constraints"]
+    assert constraints["repository_selection"] == "all"
+    assert "repository_refs" not in constraints
+
+
+def test_github_selected_repository_scope_requires_exact_refs():
+    with pytest.raises(ValueError, match="selected.*requires explicit repository refs"):
+        github_permission_capabilities(
+            {"contents": "read"}, installation_id="42", repository_selection="selected"
+        )
+    with pytest.raises(ValueError, match="all.*cannot carry selected repository refs"):
+        github_permission_capabilities(
+            {"contents": "read"},
+            installation_id="42",
+            repository_selection="all",
+            repository_refs=["repo:Constanteer/testamur"],
+        )
+    with pytest.raises(ValueError, match="unsupported GitHub repository selection"):
+        github_permission_capabilities(
+            {"contents": "read"}, installation_id="42", repository_selection="maybe"
+        )
+
+
 def test_record_github_connector_requires_exact_evidence_and_explicit_permissions(tmp_path):
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     store.record_subject(
@@ -58,6 +86,7 @@ def test_record_github_connector_requires_exact_evidence_and_explicit_permission
         installation_id="42",
         permissions={"contents": "read", "pull_requests": "write"},
         repository_refs=["repo:Constanteer/testamur"],
+        repository_selection="selected",
         evidence_ref="github-installation:42",
         evidence_revision="etag:abc123",
         boundary_refs=["boundary:product-to-github"],
@@ -105,3 +134,24 @@ def test_invalid_exact_evidence_is_rejected_before_connector_subject_is_recorded
             evidence_revision="",
         )
     assert store.maybe_subject("connector:github:bad-evidence") is None
+
+
+def test_invalid_repository_selection_does_not_mutate_graph(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    store.record_subject(
+        AuthoritySubjectKind.SESSION,
+        label="employee session",
+        subject_ref="session:employee",
+    )
+    with pytest.raises(ValueError, match="selected.*requires explicit repository refs"):
+        record_github_connector_permissions(
+            store,
+            delegator_ref="session:employee",
+            connector_ref="connector:github:bad-selection",
+            installation_id="45",
+            permissions={"contents": "read"},
+            repository_selection="selected",
+            evidence_ref="github-installation:45",
+            evidence_revision="etag:selection",
+        )
+    assert store.maybe_subject("connector:github:bad-selection") is None
