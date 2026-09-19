@@ -58,6 +58,11 @@ def credential_constraints_satisfied(
     already-explicit authority/acceptance edge. It must never be used to infer
     CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL from matching metadata alone.
     Unknown non-empty constraints fail closed.
+
+    Constraints that need graph context (for example resource/principal matching)
+    are intentionally *not* marked handled here. Until a caller evaluates them
+    against an exact graph subject they remain unresolved rather than silently
+    disappearing from the authority decision.
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
@@ -110,7 +115,8 @@ def credential_constraints_satisfied(
     handled: set[str] = {
         "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
         "approval_required", "human_confirmation_required", "mfa_required",
-        "resource", "resource_pattern", "principal", "principals",
+        # service_ref is graph-routing metadata consumed by reachability's exact
+        # ACCEPTS_CREDENTIAL lookup; it is not a credential claim by itself.
         "service_ref", "service_refs",
     }
     for required_aliases, actual_aliases, label, require_subset in families:
