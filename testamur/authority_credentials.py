@@ -77,9 +77,6 @@ def credential_constraints_satisfied(
     if revoked is True or revocation_state in {"revoked", "invalid", "disabled"}:
         reasons.add("credential_or_edge_revoked")
 
-    # Provider observations frequently expose an explicit active/disabled bit.
-    # Only an explicit False blocks; absence is not silently interpreted as proof
-    # of validity because the authority edge itself remains the authorization fact.
     if constraints.get("active") is False or attributes.get("active") is False:
         reasons.add("credential_or_edge_inactive")
 
@@ -91,8 +88,6 @@ def credential_constraints_satisfied(
         elif expiry <= at:
             reasons.add("credential_or_edge_expired")
 
-    # nbf/not_before is a validity boundary, not lineage. A credential observed
-    # before that instant exists, but is not yet exercisable authority.
     not_before_raw = (
         constraints.get("not_before")
         or constraints.get("nbf")
@@ -115,9 +110,11 @@ def credential_constraints_satisfied(
     handled: set[str] = {
         "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
         "approval_required", "human_confirmation_required", "mfa_required",
-        # service_ref is graph-routing metadata consumed by reachability's exact
-        # ACCEPTS_CREDENTIAL lookup; it is not a credential claim by itself.
-        "service_ref", "service_refs",
+        # Singular service_ref is graph-routing metadata consumed by
+        # reachability's exact ACCEPTS_CREDENTIAL lookup. Plural service_refs is
+        # deliberately not accepted until traversal implements exact multi-target
+        # routing; otherwise it would be a silently ignored authority condition.
+        "service_ref",
     }
     for required_aliases, actual_aliases, label, require_subset in families:
         handled.update(required_aliases)
