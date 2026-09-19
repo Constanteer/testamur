@@ -16,7 +16,8 @@ def test_projection_preserves_exact_blocking_evidence_without_inference():
                     "target_ref": "repo:private",
                     "relation_type": "CAN_AUTHENTICATE_AS",
                     "reachability_class": "BLOCKED",
-                    "reasons": ["audience_mismatch"],
+                    "reasons": ["audience_outside_delegation"],
+                    "failed_constraints": ["audience"],
                     "unresolved_constraints": ["device_binding"],
                     "path_edge_ids": ["edge:read", "edge:auth"],
                     "supporting_edge_ids": ["edge:accepts"],
@@ -34,11 +35,13 @@ def test_projection_preserves_exact_blocking_evidence_without_inference():
         }
     )
     item = projected["blocked_transitions"][0]
-    assert item["reasons"] == ["audience_mismatch"]
+    assert item["reasons"] == ["audience_outside_delegation"]
+    assert item["failed_constraints"] == ["audience"]
     assert item["unresolved_constraints"] == ["device_binding"]
     assert item["path_edge_ids"] == ["edge:read", "edge:auth"]
     assert item["supporting_edge_ids"] == ["edge:accepts"]
-    assert projected["blocked_reason_counts"] == {"audience_mismatch": 1}
+    assert projected["blocked_reason_counts"] == {"audience_outside_delegation": 1}
+    assert projected["failed_constraint_counts"] == {"audience": 1}
     assert projected["unresolved_constraint_counts"] == {"device_binding": 1}
     assert projected["trust_boundary_crossings"][0]["edge_id"] == "edge:auth"
 
