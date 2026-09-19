@@ -31,6 +31,31 @@ The converged extension readers cover canonical `work_session`, `reliance`, `pol
 
 Temporal integration must preserve `KNOWN_AT != AVAILABLE_BY != EFFECTIVE_AT`. Impact integration must preserve `stale != false`, `changed != invalid`, and lineage propagation as attention rather than vulnerability verdict.
 
+### Authority Web read contract
+
+Authority is a separate semantic graph from material lineage and epistemic reliance. The Web API exposes four authority-only reads:
+
+```text
+GET /v1/authority/subject?ref=<exact-subject-ref>
+GET /v1/authority/explain?edge_id=<exact-edge-id>[&edge_id=...] [&support_edge_id=...] [&start=...] [&target=...]
+GET /v1/authority/reach?ref=<exact-subject-ref>&compromise_model=<model>[&max_depth=...&max_paths=...&expansion_budget=...&as_of=...]
+GET /v1/authority/blast-radius?ref=<explicit-seed>[&ref=...]&compromise_model=<model>[...]
+```
+
+`subject` is a canonical stored-object/edge inspection read. It does not claim that an incoming or outgoing edge is traversable under any compromise model. `explain` accepts an ordered list of exact traversed `edge_id` values and keeps optional `support_edge_id` evidence separate; the router never constructs a path from adjacency. `reach` and `blast-radius` flow through the canonical authority engine and stable Product/Web projection.
+
+All four routes reject unknown query parameters. In particular, callers cannot pass lineage, reliance, affectedness, or generic connectivity flags as authority evidence. Blast-radius seeds are explicit `ref` values only. Credential audience/scope/binding constraints, delegated connector capability attenuation, blocked transitions, supporting evidence, and trust-boundary crossings remain engine-owned semantics rather than browser/router inference.
+
+The contract therefore preserves:
+
+```text
+lineage != authority
+connectivity != authorization
+affectedness != compromise seed
+supporting evidence != traversed path
+reachable capability != observed malicious use
+```
+
 ### Temporal object-read contract
 
 `TestamurProductService.temporal(ref, query)` is an object-scoped temporal read, not a global temporal search followed by a Python-side filter. Its resolution order is normative:
