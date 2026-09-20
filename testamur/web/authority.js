@@ -105,6 +105,25 @@
     return value;
   }
 
+  function explanationRecords(value, keys) {
+    for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
+    return [];
+  }
+
+  function explanationInspector(value) {
+    const edges = explanationRecords(value, ['authority_edges', 'path_edges', 'edges']);
+    const evidence = explanationRecords(value, ['supporting_evidence', 'supporting_edges', 'evidence']);
+    const crossings = explanationRecords(value, ['trust_boundary_crossings', 'boundary_crossings']);
+    const edgeRows = edges.map((edge, index) => `<article class="authority-inspector-row"><span class="authority-inspector-index">${index + 1}</span><div><strong>${esc(edge.edge_id || edge.id || 'Recorded authority edge')}</strong><span>${esc(edge.source_ref || edge.source || '')} → ${esc(edge.target_ref || edge.target || '')}</span><pre>${esc(pretty(edge))}</pre></div></article>`).join('');
+    const evidenceRows = evidence.map(item => `<article class="authority-inspector-item"><strong>${esc(item.edge_id || item.id || item.kind || 'Supporting evidence')}</strong><pre>${esc(pretty(item))}</pre></article>`).join('');
+    const crossingRows = crossings.map(crossingCard).join('');
+    return `<div class="authority-inspector">
+      <section><h4>Traversed authority edges</h4>${edgeRows || '<p class="muted">Canonical response did not project structured edge records; see raw audit payload below.</p>'}</section>
+      <section><h4>Credential / token supporting evidence</h4>${evidenceRows || '<p class="muted">No structured supporting evidence projected.</p>'}</section>
+      <section><h4>Trust-boundary crossings</h4>${crossingRows || '<p class="muted">No structured trust-boundary crossing projected.</p>'}</section>
+    </div>`;
+  }
+
   async function explainExactPath(button) {
     const output = button.parentElement.querySelector('[data-authority-explanation]');
     let path;
@@ -134,7 +153,7 @@
         error.code = value?.error?.code || 'authority_explain_failed';
         throw error;
       }
-      output.innerHTML = `<details class="authority-explanation" open><summary>Canonical exact-edge explanation</summary><p>Traversed authority edges and supporting credential/token evidence remain distinct. No path is reconstructed from connectivity.</p><pre>${esc(pretty(value))}</pre></details>`;
+      output.innerHTML = `<details class="authority-explanation" open><summary>Canonical exact-edge explanation</summary><p>Traversed authority edges and supporting credential/token evidence remain distinct. No path is reconstructed from connectivity.</p>${explanationInspector(value)}<details class="authority-raw"><summary>Raw canonical audit payload</summary><pre>${esc(pretty(value))}</pre></details></details>`;
     } catch (error) {
       output.innerHTML = `<div class="flash flash-danger"><strong>${esc(error.code || 'authority_explain_failed')}</strong><span>${esc(error.message || error)}</span></div>`;
     }
