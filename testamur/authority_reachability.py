@@ -20,6 +20,63 @@ from .authority_reachability_v2 import (
 )
 
 
+_CAPABILITY_REASON_MARKERS = (
+    "capability",
+    "delegation",
+    "scope",
+    "audience",
+    "resource",
+    "provider",
+)
+_CREDENTIAL_REASON_MARKERS = (
+    "credential",
+    "token",
+    "expired",
+    "revoked",
+    "issuer",
+    "binding",
+    "session",
+    "device",
+)
+_CONTROL_REASON_MARKERS = (
+    "approval",
+    "mfa",
+    "human_confirmation",
+    "confirmation",
+)
+_BOUNDARY_REASON_MARKERS = ("boundary", "trust_zone", "network_zone", "source_ip")
+
+
+def _reason_groups(reasons: list[str]) -> dict[str, list[str]]:
+    """Classify canonical denial reasons for projections without changing semantics.
+
+    Grouping is deliberately descriptive: a reason remains the exact engine reason,
+    may appear in only one presentation bucket, and never becomes evidence that an
+    authority transition is valid. Unknown reasons remain visible under ``other``.
+    """
+    groups: dict[str, list[str]] = {
+        "credential_or_token": [],
+        "capability_or_delegation": [],
+        "approval_or_mfa": [],
+        "trust_boundary_policy": [],
+        "other": [],
+    }
+    for reason in reasons:
+        lowered = reason.lower()
+        if any(marker in lowered for marker in _CREDENTIAL_REASON_MARKERS):
+            bucket = "credential_or_token"
+        elif any(marker in lowered for marker in _CAPABILITY_REASON_MARKERS):
+            bucket = "capability_or_delegation"
+        elif any(marker in lowered for marker in _CONTROL_REASON_MARKERS):
+            bucket = "approval_or_mfa"
+        elif any(marker in lowered for marker in _BOUNDARY_REASON_MARKERS):
+            bucket = "trust_boundary_policy"
+        else:
+            bucket = "other"
+        groups[bucket].append(reason)
+    return groups
+
+
 def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list[str]):
     """Replay only canonical budget propagation for diagnostic attribution.
 
@@ -78,6 +135,8 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
                     item["unresolved_constraints"] = diagnostic["unresolved_constraints"]
                     item["candidate_capabilities"] = diagnostic["candidate_capabilities"]
                     item["inherited_capability_budget"] = diagnostic["inherited_capability_budget"]
+        final_reasons = [str(value) for value in item.get("reasons") or [] if str(value)]
+        item["reason_groups"] = _reason_groups(final_reasons)
         blocked.append(item)
     enriched["blocked_transitions"] = blocked
     return enriched
