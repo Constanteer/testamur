@@ -35,18 +35,20 @@ testamur product project repo demo-project
 
 A Project is a product container. Binding a repository records where scanner input comes from; it does not mean every file is relied upon.
 
-## Minute 2 — record the supply chain
+## Minute 2 — record the first baseline
 
 ```bash
 testamur product project scan demo-project
 testamur product project supply-chain demo-project
 ```
 
-The scan records manifest evidence such as lockfiles and declared dependency revisions. Recording a package/version does not verify the package and does not assert that it is safe.
+Treat this first successful scan as the **baseline observation**. It records manifest evidence such as lockfiles and declared dependency revisions. Recording a package/version does not verify the package and does not assert that it is safe.
+
+In the Web product, the equivalent first-run path is **Create project → Add first monitor → Record first baseline**. The baseline is useful because later observations have something explicit to compare against; it is not a green verdict or a trust score.
 
 Run the scan again without changing manifests: the canonical statements are intended to remain idempotent rather than manufacturing a meaningful change.
 
-## Minute 3 — make a mechanical comparison
+## Minute 3 — compare a later observation
 
 After changing a dependency or manifest, scan again and compare the immutable scan revisions:
 
@@ -58,7 +60,7 @@ testamur product project supply-chain-diff demo-project
 
 The diff can say “dependency added”, “dependency removed”, “version changed”, or “manifest bytes changed”. It must not silently turn “changed” into “invalid”, “vulnerable”, or “broken”.
 
-## Minute 4 — follow the evidence question
+## Minute 4 — follow Source → Revision → Compare → Impact → Revalidation
 
 When a change matters, ask the next explicit question rather than reading a status color as a verdict:
 
@@ -68,19 +70,23 @@ When a change matters, ask the next explicit question rather than reading a stat
 4. **Impact** — which recorded reliance or downstream work is potentially affected, and why?
 5. **Revalidation** — what check or reconsideration would justify continuing to rely on it?
 
+For supply-chain advisories, an exact package/revision overlap is a **review candidate**, not an affectedness verdict. Review the candidate against the project evidence, then record the assessment evidence and reload the canonical projection. `recorded != verified`, and `changed != invalid` still apply.
+
 This sequence is the Web product’s intended mental model too. “Impact” means attention is justified by recorded evidence; it does not mean the downstream result is false.
 
-## Minute 5 — connect an agent without granting hidden reliance
+## Minute 5 — connect Codex/MCP without granting hidden reliance
 
-Testamur’s MCP/agent surface exposes the same project evidence model. In particular, the project supply-chain tools include:
+Testamur’s MCP/agent surface exposes the same project evidence model. For an existing project, the useful read path includes:
 
 ```text
 testamur.project_supply_chain
 testamur.project_scan
 testamur.project_supply_chain_diff
 testamur.project_advisories
-testamur.project_revalidate
+testamur.project_advisory_revalidation
 ```
+
+For an advisory candidate, use `testamur.project_advisory_revalidation` to read the canonical review projection. After doing the actual review, `testamur.record_project_advisory_assessment` records evidence, basis, analyzer provenance, and optional supersession. The caller must not manufacture a canonical `verdict`, `state`, or `trust_score`; reload the project projection after the write to see the canonical result.
 
 A model fetching or seeing evidence is exposure, not durable reliance. Host integrations must keep `EXPOSED_TO_MODEL != RELIED`; reliance requires the explicit reconciliation path defined by the Testamur agent protocol.
 
