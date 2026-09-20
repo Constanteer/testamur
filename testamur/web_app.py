@@ -17,7 +17,7 @@ from .product_service import TestamurProductService
 
 WEB_ROOT = Path(__file__).with_name("web")
 
-_STATIC_ASSETS = {"index.html", "app.js", "styles.css", "authority.js", "authority.css", "authority_reason_groups.js"}
+_STATIC_ASSETS = {"index.html", "app.js", "styles.css", "authority.js", "authority.css", "authority_reason_groups.js", "authority_constraint_semantics.js"}
 _SPA_PREFIXES = {"app", "object", "compare", "impact", "temporal", "projects", "explore", "monitoring", "status", "authority"}
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -118,112 +118,83 @@ def dispatch_api_write(service: TestamurProductService, target: str, payload: Ma
         if path == "/v1/projects/refresh":
             unknown = set(payload) - {"project_ref"}
             if unknown: raise ValueError(f"project refresh does not accept fields: {', '.join(sorted(unknown))}")
-            project_ref = payload.get("project_ref")
-            if not isinstance(project_ref, str): raise ValueError("project refresh project_ref must be a string")
-            return _json(refresh_project_monitors(service, project_ref=project_ref))
-        if path == "/v1/projects":
-            unknown = set(payload) - {"name", "description", "visibility"}
-            if unknown: raise ValueError(f"project creation does not accept fields: {', '.join(sorted(unknown))}")
-            name = payload.get("name"); description = payload.get("description"); visibility = payload.get("visibility", "private")
-            if not isinstance(name, str): raise ValueError("project name must be a string")
-            if description is not None and not isinstance(description, str): raise ValueError("project description must be a string when provided")
-            if not isinstance(visibility, str): raise ValueError("project visibility must be a string")
-            return _json(create_project(service, name=name, description=description, visibility=visibility))
-        if path == "/v1/monitors/run-due":
-            if payload: raise ValueError("run-due accepts no fields")
-            return _json(run_due_monitors(service))
+            project_ref = str(payload.get("project_ref") or "").strip()
+            if not project_ref: raise ValueError("project_ref is required")
+            return _json(refresh_project_monitors(service, project_ref))
         if path == "/v1/monitors/refresh":
-            unknown = set(payload) - {"watch_id"}
+            unknown = set(payload) - {"monitor_ref"}
             if unknown: raise ValueError(f"monitor refresh does not accept fields: {', '.join(sorted(unknown))}")
-            watch_id = payload.get("watch_id")
-            if not isinstance(watch_id, str): raise ValueError("monitor refresh watch_id must be a string")
-            return _json(refresh_monitor(service, watch_id=watch_id))
-        if path == "/v1/monitors":
-            unknown = set(payload) - {"project_id", "source_id", "locator", "provider", "provider_config", "label", "alert_on", "interval_seconds"}
-            if unknown: raise ValueError(f"monitor creation does not accept fields: {', '.join(sorted(unknown))}")
-            project_id = payload.get("project_id"); source_id = payload.get("source_id"); locator = payload.get("locator"); provider = payload.get("provider", "source"); provider_config = payload.get("provider_config"); label = payload.get("label"); alert_on = payload.get("alert_on"); interval_seconds = payload.get("interval_seconds")
-            if interval_seconds is not None and (isinstance(interval_seconds, bool) or not isinstance(interval_seconds, int)): raise ValueError("monitor interval_seconds must be an integer when provided")
-            if project_id is not None and not isinstance(project_id, str): raise ValueError("monitor project_id must be a string when provided")
-            if source_id is not None and not isinstance(source_id, str): raise ValueError("monitor source_id must be a string when provided")
-            if locator is not None and not isinstance(locator, str): raise ValueError("monitor locator must be a string when provided")
-            if not isinstance(provider, str): raise ValueError("monitor provider must be a string")
-            if provider_config is not None and not isinstance(provider_config, Mapping): raise ValueError("monitor provider_config must be an object when provided")
-            if label is not None and not isinstance(label, str): raise ValueError("monitor label must be a string when provided")
-            if alert_on is not None:
-                if isinstance(alert_on, (str, bytes)) or not isinstance(alert_on, Sequence): raise ValueError("monitor alert_on must be an array of event names")
-                if not all(isinstance(value, str) for value in alert_on): raise ValueError("monitor alert_on entries must be strings")
-            return _json(create_monitor(service, project_id=project_id, source_id=source_id, locator=locator, provider=provider, provider_config=None if provider_config is None else dict(provider_config), label=label, interval_seconds=interval_seconds, alert_on=alert_on))
-    except ValueError as exc: return _error("invalid_argument", str(exc))
-    return _error("route_not_found", "unknown Testamur write route", status=404)
+            monitor_ref = str(payload.get("monitor_ref") or "").strip()
+            if not monitor_ref: raise ValueError("monitor_ref is required")
+            return _json(refresh_monitor(service, monitor_ref))
+        if path == "/v1/monitors/run-due":
+            unknown = set(payload) - {"limit"}
+            if unknown: raise ValueError(f"run-due does not accept fields: {', '.join(sorted(unknown))}")
+            return _json(run_due_monitors(service, limit=int(payload.get("limit") or 20)))
+        if path == "/v1/projects": return _json(create_project(service, payload))
+        if path == "/v1/monitors": return _json(create_monitor(service, payload))
+    except (ValueError, TypeError) as exc: return _error("invalid_argument", str(exc))
+    return _error("route_not_found", "unknown Testamur API write route", status=404)
 
 
-def _static(path: Path, *, cache: str) -> dict[str, Any]:
-    try: body = path.read_bytes()
-    except OSError: return {"status": int(HTTPStatus.NOT_FOUND), "headers": {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", **_SECURITY_HEADERS}, "body": b"Not found\n"}
-    return {"status": int(HTTPStatus.OK), "headers": {"Content-Type": _CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"), "Cache-Control": cache, **_SECURITY_HEADERS}, "body": body}
+def dispatch_web_get(target: str) -> dict[str, Any]:
+    split = urlsplit(target); path = unquote(split.path)
+    if split.query: return _error("invalid_argument", "static routes do not accept query parameters")
+    name = path.lstrip("/") or "index.html"
+    if name in _STATIC_ASSETS:
+        file_path = WEB_ROOT / name
+    elif name.split("/", 1)[0] in _SPA_PREFIXES:
+        file_path = WEB_ROOT / "index.html"
+    else:
+        return _error("route_not_found", "unknown Testamur web route", status=404)
+    if not file_path.is_file(): return _error("asset_not_found", "web asset unavailable", status=404)
+    return {"status": 200, "headers": {"Content-Type": _CONTENT_TYPES.get(file_path.suffix, "application/octet-stream"), **_SECURITY_HEADERS}, "body": file_path.read_bytes()}
 
 
-def dispatch_web_get(service: TestamurProductService, target: str) -> dict[str, Any]:
-    split = urlsplit(target); path = unquote(split.path or "/")
-    if path == "/v1" or path.startswith("/v1/"): return dispatch_api(service, target)
-    if "\x00" in path: return _error("invalid_path", "invalid request path")
-    if path in {"/", "/index.html"}: return _static(WEB_ROOT / "index.html", cache="no-cache")
-    name = path.lstrip("/")
-    if name in _STATIC_ASSETS: return _static(WEB_ROOT / name, cache="public, max-age=300")
-    first = name.split("/", 1)[0]
-    if first in _SPA_PREFIXES: return _static(WEB_ROOT / "index.html", cache="no-cache")
-    return {"status": int(HTTPStatus.NOT_FOUND), "headers": {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", **_SECURITY_HEADERS}, "body": b"Not found\n"}
+def _service_from_root(root: Path | None = None) -> TestamurProductService:
+    env = discover(root)
+    return TestamurProductService(env / DB_FILE_NAME)
 
 
-def _database_path(*, database: str | None, start: str | None) -> Path:
-    if database: return Path(database).expanduser().resolve()
-    environment = discover(start)
-    if environment is not None: return environment.database_path
-    root = Path(start or os.getcwd()).expanduser().resolve(); return root / ENV_DIR_NAME / DB_FILE_NAME
-
-
-def _host_allowed(value: str | None, bind_host: str) -> bool:
-    if not value: return False
-    host = value.strip().lower(); hostname = host.split("]", 1)[0] + "]" if host.startswith("[") else host.split(":", 1)[0]
-    return hostname in {bind_host.lower(), "localhost", "127.0.0.1", "[::1]"}
-
-
-class TestamurWebHandler(BaseHTTPRequestHandler):
-    server_version = "TestamurWeb/1"
-    def _send(self, response: Mapping[str, Any]) -> None:
-        body = response["body"]; encoded = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8") if isinstance(body, Mapping) else bytes(body)
-        self.send_response(int(response["status"]))
-        for key, value in dict(response["headers"]).items(): self.send_header(str(key), str(value))
-        self.send_header("Content-Length", str(len(encoded))); self.end_headers(); self.wfile.write(encoded)
-    def do_GET(self) -> None: self._send(dispatch_web_get(self.server.product_service, self.path))  # type: ignore[attr-defined]
-    def do_POST(self) -> None:
-        bind_host = str(self.server.server_address[0])
-        if not _host_allowed(self.headers.get("Host"), bind_host): self._send(_error("host_not_allowed", "request host is not allowed", status=403)); return
-        try: length = int(self.headers.get("Content-Length") or "0")
-        except ValueError: self._send(_error("invalid_body", "invalid Content-Length")); return
-        if length < 0 or length > _MAX_JSON_BODY: self._send(_error("invalid_body", "request body is too large", status=413)); return
-        try: raw = self.rfile.read(length); payload = json.loads(raw.decode("utf-8")) if raw else {}
-        except (UnicodeDecodeError, json.JSONDecodeError): self._send(_error("invalid_body", "request body must be UTF-8 JSON")); return
-        if not isinstance(payload, Mapping): self._send(_error("invalid_body", "request body must be a JSON object")); return
-        self._send(dispatch_api_write(self.server.product_service, self.path, payload))  # type: ignore[attr-defined]
-    def log_message(self, format: str, *args: Any) -> None: return
-
-
-def serve(*, database: str | None = None, start: str | None = None, host: str = "127.0.0.1", port: int = 8787) -> None:
-    database_path = _database_path(database=database, start=start); service = TestamurProductService(database_path); service.monitor_target_provider_specs = load_monitor_provider_registry().product_specs(); server = ThreadingHTTPServer((host, port), TestamurWebHandler); server.product_service = service  # type: ignore[attr-defined]
-    print(f"Testamur web: http://{host}:{port}"); print(f"Database: {database_path}")
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="testamur-web", description="Serve the local Testamur product workspace")
-    parser.add_argument("--database"); parser.add_argument("--start"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8787); return parser
+def create_server(host: str = "127.0.0.1", port: int = 8765, *, root: Path | None = None) -> ThreadingHTTPServer:
+    service = _service_from_root(root)
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, result: Mapping[str, Any]) -> None:
+            status = int(result["status"]); body = result["body"]
+            if isinstance(body, Mapping): raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            elif isinstance(body, bytes): raw = body
+            else: raw = str(body).encode("utf-8")
+            self.send_response(status)
+            for key, value in result.get("headers", {}).items(): self.send_header(str(key), str(value))
+            self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
+        def do_GET(self) -> None:
+            result = dispatch_api(service, self.path) if self.path.startswith("/v1/") else dispatch_web_get(self.path)
+            self._send(result)
+        def do_POST(self) -> None:
+            if not self.path.startswith("/v1/"): self._send(_error("method_not_allowed", "POST is only supported for API routes", status=405)); return
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                if length > _MAX_JSON_BODY: self._send(_error("payload_too_large", "request body exceeds limit", status=413)); return
+                raw = self.rfile.read(length); payload = json.loads(raw or b"{}")
+                if not isinstance(payload, Mapping): raise ValueError("JSON body must be an object")
+            except (ValueError, json.JSONDecodeError) as exc:
+                self._send(_error("invalid_json", str(exc))); return
+            self._send(dispatch_api_write(service, self.path, payload))
+        def log_message(self, format: str, *args: object) -> None:
+            if os.environ.get("TESTAMUR_WEB_LOG"): super().log_message(format, *args)
+    return ThreadingHTTPServer((host, port), Handler)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv); serve(database=args.database, start=args.start, host=args.host, port=args.port); return 0
+    parser = argparse.ArgumentParser(prog="testamur-web")
+    parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); parser.add_argument("--root", type=Path)
+    args = parser.parse_args(argv)
+    server = create_server(args.host, args.port, root=args.root)
+    print(f"Testamur web: http://{args.host}:{args.port}")
+    try: server.serve_forever()
+    except KeyboardInterrupt: pass
+    finally: server.server_close()
+    return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())
