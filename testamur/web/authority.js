@@ -62,14 +62,22 @@
     return `<article class="authority-card authority-allowed"><div class="authority-card-head"><strong>${esc(capabilityName(capability))}</strong>${badge(item.reachability_class || 'reachable', 'good')}</div><p>${esc(constraintSummary(capability))}</p>${pathEvidence(item)}</article>`;
   }
 
+  function blockedReasonProjection(item) {
+    const renderer = globalThis.testamurAuthorityReasonGroups;
+    if (!renderer || typeof renderer.renderBlockedReasons !== 'function') {
+      // Fail closed: do not recreate ProductService reason classification here.
+      return '<p class="muted">Canonical denial grouping unavailable; no client-side classification is attempted.</p>';
+    }
+    return renderer.renderBlockedReasons(item, esc) || '<p>Denied by explicit authority policy.</p>';
+  }
+
   function blockedCard(item) {
-    const reasons = list(item.reasons || item.failure_reasons);
     const failed = list(item.failed_constraints);
     const unresolved = list(item.unresolved_constraints);
     const candidates = list(item.candidate_capabilities);
     const budget = list(item.inherited_capability_budget);
     return `<article class="authority-card authority-blocked"><div class="authority-card-head"><strong>${esc(item.target_ref || item.edge_id || 'Blocked transition')}</strong>${badge('blocked', 'warn')}</div>
-      <p>${reasons.length ? reasons.map(reason => `<code>${esc(reason)}</code>`).join(' ') : 'Denied by explicit authority policy.'}</p>
+      ${blockedReasonProjection(item)}
       ${failed.length ? `<div class="authority-constraint"><span>Failed constraints</span>${failed.map(value => `<code>${esc(value)}</code>`).join('')}</div>` : ''}
       ${unresolved.length ? `<div class="authority-constraint"><span>Unresolved — not assumed valid</span>${unresolved.map(value => `<code>${esc(value)}</code>`).join('')}</div>` : ''}
       <details><summary>Candidate authority vs delegated budget</summary><div class="authority-budget"><div><h4>Candidate</h4><pre>${esc(pretty(candidates))}</pre></div><div><h4>Inherited budget</h4><pre>${esc(pretty(budget))}</pre></div></div></details>
