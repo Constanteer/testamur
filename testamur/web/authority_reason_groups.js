@@ -1,8 +1,8 @@
-/* Canonical Authority blocked-reason projection renderer.
+/* Canonical Authority presentation renderers.
  *
  * This module is deliberately presentation-only. It consumes ProductService
- * `reason_groups`; it does not classify reason strings, traverse graphs, or
- * infer authority from lineage/reliance/affectedness/connectivity.
+ * projections; it does not classify reason strings, traverse graphs, validate
+ * credentials, or infer authority from lineage/reliance/affectedness/connectivity.
  */
 (() => {
   const ORDER = [
@@ -12,6 +12,18 @@
     ['trust_boundary_policy', 'Trust-boundary policy'],
     ['other', 'Other / unclassified'],
   ];
+  const CONSTRAINT_LABELS = Object.freeze({
+    audiences: 'Audience',
+    scopes: 'Scope',
+    issuer: 'Issuer',
+    tenant: 'Tenant',
+    binding: 'Binding',
+    expires_at: 'Expiry / validity bound',
+    repositories: 'Repository selection',
+    resources: 'Resource selection',
+    mfa_required: 'MFA requirement',
+    approval_required: 'Approval requirement',
+  });
 
   function canonicalReasonGroups(item) {
     const groups = item && typeof item.reason_groups === 'object' && item.reason_groups !== null
@@ -60,13 +72,29 @@
     return `${grouped}${raw}`;
   }
 
-  // Export a narrow presentation surface for authority.js. Grouping comes
-  // exclusively from ProductService. Raw reasons are audit-only and are never
-  // inspected to derive a category, permission, validity, or reachability.
+  function renderRecordedConstraintSemantics(record, escapeHtml) {
+    const semantics = record && record.recorded_constraint_semantics;
+    if (!semantics || typeof semantics !== 'object' || Array.isArray(semantics)) return '';
+    const escValue = typeof escapeHtml === 'function' ? escapeHtml : escapeFallback;
+    const rows = Object.entries(CONSTRAINT_LABELS)
+      .filter(([key]) => Object.prototype.hasOwnProperty.call(semantics, key))
+      .map(([key, label]) => {
+        const values = Array.isArray(semantics[key]) ? semantics[key] : [semantics[key]];
+        const rendered = values.map(value => `<code>${escValue(typeof value === 'object' ? JSON.stringify(value) : String(value))}</code>`).join('');
+        return `<div class="authority-semantic-row"><span>${label}</span><div>${rendered}</div></div>`;
+      }).join('');
+    if (!rows) return '';
+    return `<div class="authority-recorded-semantics"><strong>Recorded constraint semantics</strong><p>Projection only — recorded does not mean valid, and omitted does not mean unrestricted.</p>${rows}</div>`;
+  }
+
+  // Export one narrow production presentation surface for authority.js.
+  // Grouping comes exclusively from ProductService. Raw reasons are audit-only;
+  // recorded constraints are display-only and are never validated in-browser.
   globalThis.testamurAuthorityReasonGroups = Object.freeze({
     canonicalReasonGroups,
     render: renderAuthorityReasonGroups,
     renderRawReasons,
     renderBlockedReasons,
+    renderRecordedConstraintSemantics,
   });
 })();
