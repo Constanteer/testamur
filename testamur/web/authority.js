@@ -31,10 +31,15 @@
 
   function authorityForm() {
     return `<form class="authority-query" data-authority-form>
-      <label><span>Starting subject</span><input name="ref" required placeholder="credential:…, principal:…, connector:…" /></label>
+      <label><span>Mode</span><select name="mode"><option value="reach">single-subject reachability</option><option value="blast">multi-seed blast radius</option></select></label>
+      <label><span>Authority subject(s)</span><textarea name="refs" required rows="3" placeholder="credential:…&#10;connector:…"></textarea><small>One exact authority subject per line. Blast mode never treats lineage, reliance, affectedness or adjacency as compromise evidence.</small></label>
       <label><span>Compromise model</span><select name="compromise_model"><option value="credential_theft">credential theft</option><option value="runtime_compromise">runtime compromise</option><option value="principal_compromise">principal compromise</option><option value="connector_compromise">connector compromise</option></select></label>
-      <button class="btn btn-primary" type="submit">What can this reach?</button>
+      <button class="btn btn-primary" type="submit">Evaluate explicit authority</button>
     </form>`;
+  }
+
+  function exactRefs(raw) {
+    return String(raw || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
   }
 
   function pathEvidence(item) {
@@ -77,14 +82,30 @@
       <section><div class="section-head"><h2>Trust-boundary crossings</h2><span>${crossings.length}</span></div>${crossings.length ? `<div class="authority-crossings">${crossings.map(crossingCard).join('')}</div>` : empty('No boundary crossing recorded', 'This result contains no explicit trust-boundary crossing.')}</section>`;
   }
 
+  async function canonicalBlast(refs, compromiseModel) {
+    const query = new URLSearchParams();
+    refs.forEach(ref => query.append('ref', ref));
+    query.set('compromise_model', compromiseModel);
+    const response = await fetch(`/v1/authority/blast-radius?${query.toString()}`, { headers: { Accept: 'application/json' } });
+    const value = await response.json();
+    if (!response.ok || value?.ok === false) {
+      const error = new Error(value?.error?.message || `HTTP ${response.status}`);
+      error.code = value?.error?.code || 'authority_blast_failed';
+      throw error;
+    }
+    return value;
+  }
+
   async function authorityPage() {
-    shell(`<div class="page-title"><div><h1>Authority</h1><p>Inspect explicit capabilities, delegation limits and compromise reachability.</p></div></div>${semanticsNotice()}${authorityForm()}<div data-authority-result>${empty('Run an authority query', 'Enter an exact authority subject. Testamur will not infer permission from connectivity.')}</div>`, true);
+    shell(`<div class="page-title"><div><h1>Authority</h1><p>Inspect explicit capabilities, delegation limits and compromise reachability.</p></div></div>${semanticsNotice()}${authorityForm()}<div data-authority-result>${empty('Run an authority query', 'Enter exact authority subjects. Testamur will not infer permission from connectivity.')}</div>`, true);
     document.querySelector('[data-authority-form]')?.addEventListener('submit', runAuthorityQuery);
-    const ref = params().get('ref');
-    if (ref) {
+    const query = params();
+    const refs = query.getAll('ref');
+    if (refs.length) {
       const form = document.querySelector('[data-authority-form]');
-      form.elements.ref.value = ref;
-      form.elements.compromise_model.value = params().get('compromise_model') || 'credential_theft';
+      form.elements.refs.value = refs.join('\n');
+      form.elements.mode.value = query.get('mode') === 'blast' || refs.length > 1 ? 'blast' : 'reach';
+      form.elements.compromise_model.value = query.get('compromise_model') || 'credential_theft';
       await runAuthorityQuery({ preventDefault() {}, currentTarget: form }, false);
     }
   }
@@ -93,13 +114,26 @@
     event.preventDefault();
     const form = event.currentTarget;
     const result = document.querySelector('[data-authority-result]');
-    const ref = form.elements.ref.value.trim();
+    const refs = exactRefs(form.elements.refs.value);
+    const mode = form.elements.mode.value;
     const compromiseModel = form.elements.compromise_model.value;
-    if (!ref) return;
-    result.innerHTML = loading('Evaluating explicit authority paths…');
+    if (!refs.length) return;
+    if (mode === 'reach' && refs.length !== 1) {
+      result.innerHTML = `<div class="flash flash-danger"><strong>exact_seed_required</strong><span>Single-subject reachability requires exactly one authority subject. Use blast-radius mode for multiple explicit compromise seeds.</span></div>`;
+      return;
+    }
+    result.innerHTML = loading(mode === 'blast' ? 'Evaluating explicit multi-seed blast radius…' : 'Evaluating explicit authority paths…');
     try {
-      const value = await api('/v1/authority/reach', { ref, compromise_model: compromiseModel });
-      if (updateLocation) history.replaceState({}, '', `/authority?ref=${encodeURIComponent(ref)}&compromise_model=${encodeURIComponent(compromiseModel)}`);
+      const value = mode === 'blast'
+        ? await canonicalBlast(refs, compromiseModel)
+        : await api('/v1/authority/reach', { ref: refs[0], compromise_model: compromiseModel });
+      if (updateLocation) {
+        const query = new URLSearchParams();
+        query.set('mode', mode);
+        refs.forEach(ref => query.append('ref', ref));
+        query.set('compromise_model', compromiseModel);
+        history.replaceState({}, '', `/authority?${query.toString()}`);
+      }
       result.innerHTML = authorityResults(value);
       bindNavigation();
     } catch (error) {
