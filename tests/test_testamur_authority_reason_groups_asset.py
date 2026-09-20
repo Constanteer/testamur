@@ -10,7 +10,7 @@ WEB_ROOT = Path(__file__).parents[1] / "testamur" / "web"
 
 
 class AuthorityReasonGroupsAssetTest(unittest.TestCase):
-    def test_renderer_consumes_only_canonical_reason_groups(self) -> None:
+    def test_renderer_consumes_only_canonical_reason_groups_for_classification(self) -> None:
         script = (WEB_ROOT / "authority_reason_groups.js").read_text(encoding="utf-8")
         self.assertIn("item.reason_groups", script)
         self.assertIn("credential_or_token", script)
@@ -28,6 +28,15 @@ class AuthorityReasonGroupsAssetTest(unittest.TestCase):
         self.assertIn("Other / unclassified", script)
         self.assertIn("presentation-only", script)
         self.assertIn("does not classify reason strings", script)
+
+    def test_raw_denial_reasons_are_audit_only_and_preserved_separately(self) -> None:
+        script = (WEB_ROOT / "authority_reason_groups.js").read_text(encoding="utf-8")
+        self.assertIn("Raw canonical denial reasons", script)
+        self.assertIn("renderRawReasons", script)
+        self.assertIn("renderBlockedReasons", script)
+        self.assertIn("Raw reasons are audit-only", script)
+        self.assertIn("never\n  // inspected to derive a category, permission, validity, or reachability", script)
+        self.assertNotIn("failure_reasons.includes", script)
 
     def test_renderer_is_a_real_production_asset_loaded_before_authority_ui(self) -> None:
         response = dispatch_web_get(None, "/authority_reason_groups.js")  # type: ignore[arg-type]
