@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from testamur.web_app import dispatch_web_get
+
 
 WEB_ROOT = Path(__file__).parents[1] / "testamur" / "web"
 
@@ -26,6 +28,18 @@ class AuthorityReasonGroupsAssetTest(unittest.TestCase):
         self.assertIn("Other / unclassified", script)
         self.assertIn("presentation-only", script)
         self.assertIn("does not classify reason strings", script)
+
+    def test_renderer_is_a_real_production_asset_loaded_before_authority_ui(self) -> None:
+        response = dispatch_web_get(None, "/authority_reason_groups.js")  # type: ignore[arg-type]
+        self.assertEqual(200, response["status"])
+        self.assertEqual("text/javascript; charset=utf-8", response["headers"]["Content-Type"])
+        body = bytes(response["body"]).decode("utf-8")
+        self.assertIn("testamurAuthorityReasonGroups", body)
+
+        index = bytes(dispatch_web_get(None, "/")["body"]).decode("utf-8")  # type: ignore[arg-type]
+        helper = index.index('/authority_reason_groups.js')
+        workbench = index.index('/authority.js')
+        self.assertLess(helper, workbench)
 
 
 if __name__ == "__main__":
