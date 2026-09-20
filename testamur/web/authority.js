@@ -42,10 +42,19 @@
     return String(raw || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
   }
 
+  function explainButton(item) {
+    const path = list(item.path_edge_ids);
+    if (!path.length) return '';
+    const support = list(item.supporting_edge_ids);
+    const start = item.starting_ref || item.start_ref || item.source_ref || '';
+    const target = item.target_ref || item.subject_ref || '';
+    return `<button class="btn" type="button" data-authority-explain data-path="${esc(JSON.stringify(path))}" data-support="${esc(JSON.stringify(support))}" data-start="${esc(start)}" data-target="${esc(target)}">Explain exact path</button><div data-authority-explanation></div>`;
+  }
+
   function pathEvidence(item) {
     const path = list(item.path_edge_ids);
     const support = list(item.supporting_edge_ids);
-    return `<div class="authority-evidence"><div><span>Authority path</span>${path.length ? path.map(edge => `<code>${esc(edge)}</code>`).join('') : '<em>no traversed edge</em>'}</div><div><span>Supporting evidence</span>${support.length ? support.map(edge => `<code>${esc(edge)}</code>`).join('') : '<em>none</em>'}</div></div>`;
+    return `<div class="authority-evidence"><div><span>Authority path</span>${path.length ? path.map(edge => `<code>${esc(edge)}</code>`).join('') : '<em>no traversed edge</em>'}</div><div><span>Supporting evidence</span>${support.length ? support.map(edge => `<code>${esc(edge)}</code>`).join('') : '<em>none</em>'}</div></div>${explainButton(item)}`;
   }
 
   function capabilityCard(item) {
@@ -96,6 +105,45 @@
     return value;
   }
 
+  async function explainExactPath(button) {
+    const output = button.parentElement.querySelector('[data-authority-explanation]');
+    let path;
+    let support;
+    try {
+      path = JSON.parse(button.dataset.path || '[]');
+      support = JSON.parse(button.dataset.support || '[]');
+    } catch (_) {
+      output.innerHTML = `<div class="flash flash-danger"><strong>invalid_exact_path</strong><span>Stored path metadata is invalid.</span></div>`;
+      return;
+    }
+    if (!Array.isArray(path) || !path.length || path.some(edge => typeof edge !== 'string' || !edge.trim())) {
+      output.innerHTML = `<div class="flash flash-danger"><strong>exact_path_required</strong><span>Explanation requires recorded, ordered authority edge IDs.</span></div>`;
+      return;
+    }
+    const query = new URLSearchParams();
+    path.forEach(edge => query.append('edge_id', edge));
+    if (Array.isArray(support)) support.forEach(edge => query.append('support_edge_id', edge));
+    if (button.dataset.start) query.set('start', button.dataset.start);
+    if (button.dataset.target) query.set('target', button.dataset.target);
+    output.innerHTML = loading('Loading canonical edge explanation…');
+    try {
+      const response = await fetch(`/v1/authority/explain?${query.toString()}`, { headers: { Accept: 'application/json' } });
+      const value = await response.json();
+      if (!response.ok || value?.ok === false) {
+        const error = new Error(value?.error?.message || `HTTP ${response.status}`);
+        error.code = value?.error?.code || 'authority_explain_failed';
+        throw error;
+      }
+      output.innerHTML = `<details class="authority-explanation" open><summary>Canonical exact-edge explanation</summary><p>Traversed authority edges and supporting credential/token evidence remain distinct. No path is reconstructed from connectivity.</p><pre>${esc(pretty(value))}</pre></details>`;
+    } catch (error) {
+      output.innerHTML = `<div class="flash flash-danger"><strong>${esc(error.code || 'authority_explain_failed')}</strong><span>${esc(error.message || error)}</span></div>`;
+    }
+  }
+
+  function bindAuthorityExplain() {
+    document.querySelectorAll('[data-authority-explain]').forEach(button => button.addEventListener('click', () => explainExactPath(button)));
+  }
+
   async function authorityPage() {
     shell(`<div class="page-title"><div><h1>Authority</h1><p>Inspect explicit capabilities, delegation limits and compromise reachability.</p></div></div>${semanticsNotice()}${authorityForm()}<div data-authority-result>${empty('Run an authority query', 'Enter exact authority subjects. Testamur will not infer permission from connectivity.')}</div>`, true);
     document.querySelector('[data-authority-form]')?.addEventListener('submit', runAuthorityQuery);
@@ -135,6 +183,7 @@
         history.replaceState({}, '', `/authority?${query.toString()}`);
       }
       result.innerHTML = authorityResults(value);
+      bindAuthorityExplain();
       bindNavigation();
     } catch (error) {
       result.innerHTML = `<div class="flash flash-danger"><strong>${esc(error.code || 'authority_query_failed')}</strong><span>${esc(error.message || error)}</span></div>`;
