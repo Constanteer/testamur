@@ -40,6 +40,15 @@ class AuthorityWebAssetsTest(unittest.TestCase):
         self.assertNotIn("path_edge_ids.concat", script)
         self.assertNotIn("supporting_edge_ids.concat", script)
 
+    def test_exact_path_drill_down_uses_canonical_explain_route(self) -> None:
+        script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
+        self.assertIn("/v1/authority/explain", script)
+        self.assertIn("path.forEach(edge => query.append('edge_id', edge))", script)
+        self.assertIn("support.forEach(edge => query.append('support_edge_id', edge))", script)
+        self.assertIn("Canonical exact-edge explanation", script)
+        self.assertIn("No path is reconstructed from connectivity", script)
+        self.assertNotIn("query.append('edge_id', ...support", script)
+
     def test_ui_states_that_non_authority_graphs_do_not_grant_permission(self) -> None:
         script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
         self.assertIn("Connectivity, material lineage, reliance and affectedness do not grant permission", script)
@@ -64,6 +73,7 @@ class AuthorityWebAssetsTest(unittest.TestCase):
         self.assertEqual(styles["status"], 200)
         self.assertIn(b"Testamur", page["body"])
         self.assertIn(b"/v1/authority/reach", script["body"])
+        self.assertIn(b"/v1/authority/explain", script["body"])
         self.assertIn(b".authority-query", styles["body"])
         self.assertEqual(script["headers"]["Content-Type"], "text/javascript; charset=utf-8")
         self.assertEqual(styles["headers"]["Content-Type"], "text/css; charset=utf-8")
