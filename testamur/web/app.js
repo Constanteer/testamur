@@ -1593,7 +1593,13 @@ async function comparePanel(ref) {
     const history = await api('/v1/history', { ref, limit: 100 });
     const items = (history.items || []).filter(item => historyItemRef(item));
     if (items.length < 2) {
-      return empty('Nothing to compare yet', 'Testamur needs at least two recorded versions of this object before it can make a mechanical comparison.');
+      return `<section class="workflow-empty">
+        <span class="onboarding-kicker">COMPARE · NEEDS TWO RECORDED VERSIONS</span>
+        <h2>There is not enough history to compare yet.</h2>
+        <p>Testamur can make a mechanical comparison after this source has at least two recorded observations. Run the monitor again after the upstream source has been observed later.</p>
+        <div class="workflow-empty-actions"><a data-nav class="btn btn-primary" href="/monitoring">Open monitoring</a><a data-nav class="btn btn-secondary" href="${esc(objectPath(ref))}?tab=history">See recorded versions</a></div>
+        <small>comparison describes recorded difference · changed ≠ invalid</small>
+      </section>`;
     }
     const requestedLeft = params().get('left');
     const requestedRight = params().get('right');
@@ -1642,7 +1648,7 @@ async function historyPanel(ref) {
   try {
     const history = await api('/v1/history', { ref, limit: 100 });
     const items = history.items || [];
-    if (!items.length) return empty('No recorded history', 'This object has no additional recorded history.');
+    if (!items.length) return `<section class="workflow-empty"><span class="onboarding-kicker">RECORDED VERSIONS · REVISION</span><h2>No additional observations have been recorded yet.</h2><p>History appears after Testamur observes this target again. Monitoring records the next state; it does not make a truth or validity judgment about it.</p><div class="workflow-empty-actions"><a data-nav class="btn btn-primary" href="/monitoring">Open monitoring</a></div><small>recorded ≠ verified · fetched ≠ relied</small></section>`;
     return `<div class="timeline">${items.map(item => {
       const at = item.recorded_at || item.observed_at || item.created_at;
       const label = item.title || item.statement || (item.ordinal ? `Revision ${item.ordinal}` : item.status ? `${item.status} observation` : 'Recorded history item');
@@ -1660,12 +1666,12 @@ async function impactPanel(ref) {
     const value = await api('/v1/impact', { ref });
     const items = value.items || value.affected || value.impacts || value.results;
     if (Array.isArray(items)) {
-      if (!items.length) return empty('No recorded downstream impact', 'Nothing currently projects as affected.');
+      if (!items.length) return `<section class="workflow-empty"><span class="onboarding-kicker">IMPACT · REVIEW SET</span><h2>No downstream work is currently linked for review.</h2><p>No canonical reliance or lineage projection points from this object to downstream work right now. That is not proof that nothing depends on it; it only describes the evidence Testamur has recorded.</p><div class="workflow-empty-actions"><a data-nav class="btn btn-secondary" href="/docs#impact">How Impact works</a></div><small>no recorded impact ≠ no real-world dependency</small></section>`;
       return `<div class="impact-list">${items.map(item => `<div class="impact-row"><div><strong>${esc(item.title || item.name || item.kind || 'Affected object')}</strong><small>${esc(item.reason || item.kind || '')}</small></div>${item.ref ? `<a data-nav href="${esc(objectPath(item.ref))}">Open</a>` : ''}</div>`).join('')}</div>`;
     }
     return `<div class="raw-block"><pre>${esc(pretty(value))}</pre></div>`;
   } catch (error) {
-    if (error.status === 503) return empty('Impact provider not connected', 'This environment has no canonical reliance/lineage provider.');
+    if (error.status === 503) return `<section class="workflow-empty"><span class="onboarding-kicker">IMPACT · CAPABILITY UNAVAILABLE</span><h2>Downstream review cannot be projected in this environment.</h2><p>No canonical reliance/lineage provider is connected, so Testamur cannot calculate a review set here. This is an unavailable capability, not evidence that the source has no impact.</p><div class="workflow-empty-actions"><a data-nav class="btn btn-secondary" href="/docs#impact">Read about Impact</a></div><small>capability unavailable ≠ no impact</small></section>`;
     throw error;
   }
 }
@@ -1697,6 +1703,19 @@ function timePanel(ref) {
   return `<section class="time-query-card"><div><h2>Time</h2><p>Ask what this environment had recorded at a specific time.</p></div><form data-time-form data-ref="${esc(ref)}"><label><span>Perspective</span><select name="mode"><option>KNOWN_AT</option><option>AVAILABLE_BY</option><option>EFFECTIVE_AT</option></select></label><label class="grow"><span>Timestamp</span><input name="at" type="datetime-local" required /></label><button class="btn btn-primary">Query</button></form><div data-time-result></div></section>`;
 }
 
+function objectTabPresentation(tab, kind = 'object') {
+  const labels = {
+    overview: ['Overview', kind === 'source' ? 'Source' : 'Object'],
+    history: ['Recorded versions', 'Revision'],
+    compare: ['What changed?', 'Compare'],
+    impact: ['What may need review?', 'Impact'],
+    revalidate: ['Recheck the work', 'Revalidation'],
+    time: ['Past state', 'Time'],
+    raw: ['Technical details', 'Raw'],
+  };
+  return labels[tab] || [tab, ''];
+}
+
 async function objectPage(ref, forcedTab = null) {
   shell(loading('Loading…'), true);
   try {
@@ -1723,7 +1742,7 @@ async function objectPage(ref, forcedTab = null) {
       <div class="breadcrumbs"><a data-nav href="/">Testamur</a><span>/</span><span>${esc(identity.kind || 'object')}</span></div>
       <div class="object-title-row"><div><h1>${esc(heading)}</h1><p>${esc(short(summary, 180))}</p></div>${badge(identity.kind || 'object')}</div>
     </section>
-    <nav class="object-tabs">${tabs.map(tab => `<a data-nav class="${selected === tab ? 'active' : ''}" href="${esc(objectPath(ref))}?tab=${tab}">${tab[0].toUpperCase() + tab.slice(1)}</a>`).join('')}</nav>
+    <nav class="object-tabs">${tabs.map(tab => { const [label, concept] = objectTabPresentation(tab, identity.kind); return `<a data-nav class="${selected === tab ? 'active' : ''}" href="${esc(objectPath(ref))}?tab=${tab}"><strong>${esc(label)}</strong><small>${esc(concept)}</small></a>`; }).join('')}</nav>
     <section id="object-panel" class="object-panel">${panel}</section>`, true);
     bindNavigation();
     document.querySelector('[data-time-form]')?.addEventListener('submit', runTimeQuery);
