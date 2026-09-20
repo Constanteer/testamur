@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .project_advisory_revalidation import project_advisory_revalidation
 from .project_advisory_review import project_advisory_reviews
 
 
@@ -10,8 +11,9 @@ def project_with_advisory_reviews(service: Any, ref: str) -> dict[str, Any]:
 
     The underlying project service remains authoritative for inventory and exact
     advisory/component identity overlap. This read-only composition adds current
-    immutable affectedness heads; it does not reinterpret overlap as affectedness,
-    collapse competing heads, or manufacture a trust score.
+    immutable affectedness heads and a revalidation work projection; it does not
+    reinterpret overlap as affectedness, collapse competing heads, or manufacture
+    a trust score.
     """
 
     payload = dict(service.project(ref))
@@ -36,9 +38,20 @@ def project_with_advisory_reviews(service: Any, ref: str) -> dict[str, Any]:
     enriched_supply_chain["advisory_competing_count"] = sum(
         1 for review in reviews if review.get("competing_subject_revision_ids")
     )
+
+    supply_chain_diff = enriched_supply_chain.get("diff")
+    if not isinstance(supply_chain_diff, dict):
+        supply_chain_diff = None
+    enriched_supply_chain["advisory_revalidation"] = project_advisory_revalidation(
+        reviews,
+        supply_chain_diff=supply_chain_diff,
+    )
     enriched_supply_chain["semantics"] = {
         **dict(enriched_supply_chain.get("semantics") or {}),
         "advisory_review_is_read_projection": True,
+        "advisory_revalidation_is_work_projection": True,
+        "changed_implies_invalid": False,
+        "stale_implies_false": False,
         "recorded_assessment_is_not_generic_verification": True,
         "competing_heads_are_preserved": True,
         "generic_trust_score_used": False,
