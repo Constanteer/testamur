@@ -4,11 +4,11 @@
   // Presentation-only guidance over the canonical object model. It deliberately
   // does not infer verification, reliance, affectedness, or validity.
   const steps = [
-    ['source', 'Source', 'Identify the upstream object you are reviewing.'],
-    ['history', 'Revision', 'Choose the recorded state whose evidence you want to inspect.'],
-    ['compare', 'Compare', 'Read the mechanical delta before making a judgment.'],
-    ['impact', 'Impact', 'Follow explicit recorded reliance to find work that deserves attention.'],
-    ['revalidate', 'Revalidation', 'Record the scoped check or reconsideration that follows.'],
+    ['source', 'What is this?', 'Source', 'Identify the upstream object you are reviewing.'],
+    ['history', 'What was recorded?', 'Revision', 'Choose the recorded state whose evidence you want to inspect.'],
+    ['compare', 'What changed?', 'Compare', 'Read the mechanical delta before making a judgment.'],
+    ['impact', 'What may need review?', 'Impact', 'Follow explicit recorded reliance to find work that deserves attention.'],
+    ['revalidate', 'Recheck the work', 'Revalidation', 'Record the scoped check or reconsideration that follows.'],
   ];
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -56,16 +56,16 @@
     guide.setAttribute('aria-label', 'Evidence review workflow');
     guide.innerHTML = `
       <div class="contextual-guide-head">
-        <div><span class="contextual-guide-kicker">REVIEW WORKFLOW · ${activeIndex + 1}/5</span><strong>${esc(active[1])}</strong><p>${esc(active[2])}</p></div>
+        <div><span class="contextual-guide-kicker">REVIEW WORKFLOW · ${activeIndex + 1}/5</span><strong>${esc(active[1])}</strong><small>${esc(active[2])}</small><p>${esc(active[3])}</p></div>
         <a data-nav href="/learn">Why these steps?</a>
       </div>
       <nav class="contextual-guide-steps" aria-label="Source to revalidation">
-        ${steps.map(([key, label], index) => `<a data-nav href="${esc(href(key, objectRef))}" class="${index === activeIndex ? 'active' : ''} ${index < activeIndex ? 'visited' : ''}"${index === activeIndex ? ' aria-current="step"' : ''}><span>${index < activeIndex ? '✓' : index + 1}</span>${esc(label)}</a>`).join('')}
+        ${steps.map(([key, label, concept], index) => `<a data-nav href="${esc(href(key, objectRef))}" class="${index === activeIndex ? 'active' : ''} ${index < activeIndex ? 'visited' : ''}"${index === activeIndex ? ' aria-current="step"' : ''}><span>${index < activeIndex ? '✓' : index + 1}</span><div><strong>${esc(label)}</strong><small>${esc(concept)}</small></div></a>`).join('')}
       </nav>
       <div class="contextual-guide-boundary">
         <span>recorded ≠ verified</span><span>fetched ≠ relied</span><span>changed ≠ invalid</span><span>stale ≠ false</span>
       </div>
-      ${next ? `<div class="contextual-guide-next"><span>Next: ${esc(next[1])}</span><a data-nav class="btn btn-secondary" href="${esc(href(next[0], objectRef))}">${esc(next[1])} →</a></div>` : '<div class="contextual-guide-next"><span>Review loop complete when the revalidation evidence is recorded.</span><a data-nav href="/projects">Back to projects →</a></div>'}`;
+      ${next ? `<div class="contextual-guide-next"><span>Next: ${esc(next[1])} <small>${esc(next[2])}</small></span><a data-nav class="btn btn-secondary" href="${esc(href(next[0], objectRef))}">${esc(next[1])} →</a></div>` : '<div class="contextual-guide-next"><span>Review loop complete when the revalidation evidence is recorded.</span><a data-nav href="/projects">Back to projects →</a></div>'}`;
     main.prepend(guide);
   }
 
