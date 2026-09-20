@@ -87,14 +87,28 @@
     return `<div class="authority-recorded-semantics"><strong>Recorded constraint semantics</strong><p>Projection only — recorded does not mean valid, and omitted does not mean unrestricted.</p>${rows}</div>`;
   }
 
+  function renderExactEvidenceRecord(record, role, escapeHtml) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return '';
+    const escValue = typeof escapeHtml === 'function' ? escapeHtml : escapeFallback;
+    const evidenceRole = role === 'supporting_evidence' ? 'Supporting credential / token evidence' : 'Traversed authority edge';
+    const edgeId = record.edge_id || record.id || 'recorded-edge';
+    const source = record.source_ref || record.source || '';
+    const target = record.target_ref || record.target || '';
+    const semantics = renderRecordedConstraintSemantics(record, escValue);
+    return `<div class="authority-exact-evidence" data-evidence-role="${role === 'supporting_evidence' ? 'supporting_evidence' : 'authority_path'}"><div><strong>${evidenceRole}</strong><code>${escValue(edgeId)}</code></div>${source || target ? `<span>${escValue(source)} → ${escValue(target)}</span>` : ''}${semantics}<details><summary>Raw recorded edge</summary><pre>${escValue(JSON.stringify(record, null, 2))}</pre></details></div>`;
+  }
+
   // Export one narrow production presentation surface for authority.js.
   // Grouping comes exclusively from ProductService. Raw reasons are audit-only;
   // recorded constraints are display-only and are never validated in-browser.
+  // Exact evidence records preserve the backend role: supporting evidence never
+  // becomes an authority-path edge merely because it is connected to one.
   globalThis.testamurAuthorityReasonGroups = Object.freeze({
     canonicalReasonGroups,
     render: renderAuthorityReasonGroups,
     renderRawReasons,
     renderBlockedReasons,
     renderRecordedConstraintSemantics,
+    renderExactEvidenceRecord,
   });
 })();
