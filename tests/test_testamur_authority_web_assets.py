@@ -49,6 +49,19 @@ class AuthorityWebAssetsTest(unittest.TestCase):
         self.assertIn("No path is reconstructed from connectivity", script)
         self.assertNotIn("query.append('edge_id', ...support", script)
 
+    def test_exact_explanation_inspector_preserves_canonical_categories(self) -> None:
+        script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
+        self.assertIn("function explanationInspector(value)", script)
+        self.assertIn("Traversed authority edges", script)
+        self.assertIn("Credential / token supporting evidence", script)
+        self.assertIn("Trust-boundary crossings", script)
+        self.assertIn("Raw canonical audit payload", script)
+        # The inspector renders only records already projected by the canonical
+        # explanation response; it must not synthesize graph paths client-side.
+        self.assertIn("explanationRecords(value", script)
+        self.assertNotIn("findPath", script)
+        self.assertNotIn("shortestPath", script)
+
     def test_ui_states_that_non_authority_graphs_do_not_grant_permission(self) -> None:
         script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
         self.assertIn("Connectivity, material lineage, reliance and affectedness do not grant permission", script)
