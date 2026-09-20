@@ -17,7 +17,7 @@ from .product_service import TestamurProductService
 
 WEB_ROOT = Path(__file__).with_name("web")
 
-_STATIC_ASSETS = {"index.html", "app.js", "styles.css", "authority.js", "authority.css"}
+_STATIC_ASSETS = {"index.html", "app.js", "styles.css", "authority.js", "authority.css", "authority_reason_groups.js"}
 _SPA_PREFIXES = {"app", "object", "compare", "impact", "temporal", "projects", "explore", "monitoring", "status", "authority"}
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -214,11 +214,16 @@ def serve(*, database: str | None = None, start: str | None = None, host: str = 
     print(f"Testamur web: http://{host}:{port}"); print(f"Database: {database_path}")
     try: server.serve_forever()
     except KeyboardInterrupt: pass
-    finally: server.server_close(); service.close()
+    finally: server.server_close()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="testamur-web", description="Serve the local Testamur product workspace")
+    parser.add_argument("--database"); parser.add_argument("--start"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8787); return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="testamur-web", description="Serve the canonical local Testamur web workspace."); parser.add_argument("--database"); parser.add_argument("--start"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8787); args = parser.parse_args(argv); serve(database=args.database, start=args.start, host=args.host, port=args.port); return 0
+    args = build_parser().parse_args(argv); serve(database=args.database, start=args.start, host=args.host, port=args.port); return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())
