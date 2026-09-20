@@ -48,6 +48,34 @@ ADVISORY_ASSESSMENT_TOOL = {
     },
 }
 
+PROJECT_ADVISORY_ASSESSMENT_TOOL = {
+    "name": "testamur.record_project_advisory_assessment",
+    "title": "Record evidence for a current Project advisory candidate",
+    "description": (
+        "Record evidence for an exact advisory candidate currently exposed by one Project's canonical "
+        "revalidation projection. Project membership is checked before the canonical affectedness write. "
+        "The caller supplies evidence, never a verdict/state/trust score; candidate membership is not "
+        "affectedness, verification, or reliance."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "project_ref": {"type": "string"},
+            "event_revision_id": {"type": "string"},
+            "subject_revision": {"type": "string"},
+            "evidence": {"type": "array", "items": {"type": "object"}},
+            "basis": {"type": "array", "items": {"type": "object"}},
+            "scope": {"type": "object"},
+            "lineage_path_edge_ids": {"type": "array", "items": {"type": "string"}},
+            "analyzer": {"type": "object"},
+            "policy_ref": {"type": "string"},
+            "supersedes_assessment_id": {"type": "string"},
+        },
+        "required": ["project_ref", "event_revision_id", "subject_revision", "evidence", "basis"],
+        "additionalProperties": False,
+    },
+}
+
 
 def _project_revalidation(arguments: Mapping[str, Any]) -> dict[str, Any]:
     service = _base.TestamurProductService.integrated(_base._db_path())
@@ -94,8 +122,64 @@ def _record_advisory_assessment(arguments: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _record_project_advisory_assessment(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    service = _base.TestamurProductService.integrated(_base._db_path())
+    project_ref = _base._required(arguments, "project_ref")
+    event_revision_id = _base._required(arguments, "event_revision_id")
+    subject_revision = _base._required(arguments, "subject_revision")
+    detail = _base.project_with_advisory_reviews(service, project_ref)
+    if detail.get("ok") is not True:
+        return detail
+
+    supply = detail.get("supply_chain")
+    if not isinstance(supply, Mapping):
+        supply = {}
+    projection = supply.get("advisory_revalidation")
+    if not isinstance(projection, Mapping):
+        projection = {}
+    reviews = projection.get("reviews")
+    if not isinstance(reviews, list):
+        reviews = []
+
+    matched = False
+    for review in reviews:
+        if not isinstance(review, Mapping) or str(review.get("event_revision_id") or "") != event_revision_id:
+            continue
+        subjects = review.get("subjects")
+        if not isinstance(subjects, list):
+            continue
+        if any(
+            isinstance(subject, Mapping)
+            and str(subject.get("subject_revision") or "") == subject_revision
+            for subject in subjects
+        ):
+            matched = True
+            break
+    if not matched:
+        raise ValueError(
+            "event_revision_id/subject_revision is not a current exact advisory candidate for this project"
+        )
+
+    write_payload = {key: value for key, value in arguments.items() if key != "project_ref"}
+    result = record_advisory_assessment(service, write_payload)
+    return {
+        "ok": True,
+        "schema": "testamur.mcp.project-advisory-assessment.v1",
+        "project": detail["project"],
+        "assessment": result,
+        "semantics": {
+            "candidate_membership_is_not_affectedness_verdict": True,
+            "recorded_is_not_verified": True,
+            "recorded_is_not_relied": True,
+            "lineage_is_not_affectedness_verdict": True,
+            "caller_supplies_verdict": False,
+            "generic_trust_score_used": False,
+        },
+    }
+
+
 def _install() -> None:
-    for tool in (PROJECT_REVALIDATION_TOOL, ADVISORY_ASSESSMENT_TOOL):
+    for tool in (PROJECT_REVALIDATION_TOOL, ADVISORY_ASSESSMENT_TOOL, PROJECT_ADVISORY_ASSESSMENT_TOOL):
         if not any(existing.get("name") == tool["name"] for existing in _base.TOOLS):
             _base.TOOLS.append(tool)
     base_call = _base._call_tool
@@ -107,6 +191,8 @@ def _install() -> None:
             return _project_revalidation(arguments)
         if name == ADVISORY_ASSESSMENT_TOOL["name"]:
             return _record_advisory_assessment(arguments)
+        if name == PROJECT_ADVISORY_ASSESSMENT_TOOL["name"]:
+            return _record_project_advisory_assessment(arguments)
         return base_call(name, arguments)
 
     setattr(call_tool, "_testamur_project_extension", True)
