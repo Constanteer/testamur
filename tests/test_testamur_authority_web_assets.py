@@ -19,6 +19,16 @@ class AuthorityWebAssetsTest(unittest.TestCase):
         self.assertIn("unresolved_constraints", script)
         self.assertIn("trust_boundary_crossings", script)
 
+    def test_blast_radius_uses_repeated_exact_authority_seed_refs(self) -> None:
+        script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
+        self.assertIn("/v1/authority/blast-radius", script)
+        self.assertIn("refs.forEach(ref => query.append('ref', ref))", script)
+        self.assertIn("Single-subject reachability requires exactly one authority subject", script)
+        self.assertIn("Use blast-radius mode for multiple explicit compromise seeds", script)
+        self.assertNotIn("lineage_ref", script)
+        self.assertNotIn("affected_ref", script)
+        self.assertNotIn("reliance_ref", script)
+
     def test_traversed_path_and_supporting_evidence_remain_separate(self) -> None:
         script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
         self.assertIn("path_edge_ids", script)
