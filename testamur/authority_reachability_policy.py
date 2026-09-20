@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
@@ -111,6 +112,22 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
     if parent_resource is not None and candidate.get("resource") != parent_resource:
         reasons.add("resource_outside_delegation")
         failed.add("resource")
+
+    # resource_pattern is authority scope, not descriptive metadata. Keep its
+    # diagnostics aligned with authority_capability._resource_within: a concrete
+    # child resource must match the inherited pattern; a pattern-only child must
+    # preserve the exact inherited pattern rather than widening it.
+    parent_pattern = pc.get("resource_pattern")
+    if parent_pattern is not None:
+        child_resource = candidate.get("resource")
+        child_pattern = cc.get("resource_pattern")
+        if child_resource is not None:
+            if not fnmatch.fnmatchcase(str(child_resource), str(parent_pattern)):
+                reasons.add("resource_pattern_outside_delegation")
+                failed.add("resource_pattern")
+        elif child_pattern != parent_pattern:
+            reasons.add("resource_pattern_not_preserved")
+            failed.add("resource_pattern")
 
     candidate_selection = cc.get("repository_selection")
     candidate_refs = _constraint_set(cc, "repository_ref", "repository_refs")
