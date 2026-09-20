@@ -8,7 +8,7 @@
     const html = baseNav();
     const active = location.pathname.startsWith('/authority');
     const link = `<a data-nav class="${active ? 'active' : ''}" href="/authority"${active ? ' aria-current="page"' : ''}>Authority</a>`;
-    return html.replace('${item}', '${item}').replace('<a data-nav class="', link + '<a data-nav class="');
+    return html.replace('</nav>', `${link}</nav>`);
   };
 
   const baseRender = render;
@@ -107,7 +107,5 @@
     }
   }
 
-  // app.js starts bootstrap before this deferred module executes. Re-render an
-  // initial authority URL after installing the route override.
   if (location.pathname === '/authority') queueMicrotask(() => render());
 })();
