@@ -19,3 +19,9 @@
   .contextual-guide-steps a + a { border-left: 0; border-top: 1px solid var(--line); }
   .contextual-guide-next { align-items: flex-start; flex-direction: column; }
 }
+
+.contextual-guide-head small { color: var(--muted); font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; }
+.contextual-guide-steps a > div { min-width: 0; display: grid; gap: 1px; }
+.contextual-guide-steps a strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: 11px; }
+.contextual-guide-steps a small { color: var(--muted); font-size: 9px; font-weight: 500; }
+.contextual-guide-next > span small { margin-left: 5px; color: var(--muted); font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
