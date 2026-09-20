@@ -46,15 +46,52 @@ def test_explanation_projects_path_support_and_boundaries_without_conflating_the
     assert value["trust_boundary_crossings"] == [{"boundary_ref": "boundary:github", "edge_id": path_edge["edge_id"], "source_ref": "principal:alice", "target_ref": "connector:github", "path_index": 0}]
     assert value["authority_edges"][0]["constraints"]["required_audiences"] == ["github"]
     assert value["supporting_evidence"][0]["constraints"]["required_scopes"] == ["repo:read"]
+    assert value["authority_edges"][0]["recorded_constraint_semantics"] == {"audiences": ["github"], "scopes": ["repo:read"]}
+    assert value["supporting_evidence"][0]["recorded_constraint_semantics"] == {"audiences": ["github"], "scopes": ["repo:read"]}
     assert value["semantics"]["supporting_evidence_is_not_authority_path"] is True
     assert value["semantics"]["boundary_crossings_require_recorded_path_boundary_refs"] is True
+    assert value["semantics"]["recorded_constraint_projection_is_not_validation"] is True
+    assert value["semantics"]["omitted_constraint_is_unknown_not_unrestricted"] is True
+
+
+def test_constraint_projection_preserves_presence_without_inventing_validity(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    _subject(store, "principal:alice", AuthoritySubjectKind.PRINCIPAL)
+    _subject(store, "connector:github", AuthoritySubjectKind.CONNECTOR)
+    edge = store.record_edge(
+        "principal:alice",
+        AuthorityRelationType.DELEGATES,
+        "connector:github",
+        constraints={
+            "issuer": "https://idp.example",
+            "tenant": "acme",
+            "binding": "device:key-1",
+            "expires_at": "2026-09-21T02:00:00Z",
+            "repositories": ["acme/app"],
+            "mfa_required": True,
+            "provider_extension": {"opaque": True},
+        },
+        evidence=OBSERVED,
+    )
+    value = explain_authority_path(store, [edge["edge_id"]])
+    projection = value["authority_edges"][0]["recorded_constraint_semantics"]
+    assert projection == {
+        "issuer": "https://idp.example",
+        "tenant": "acme",
+        "binding": "device:key-1",
+        "expires_at": "2026-09-21T02:00:00Z",
+        "repositories": ["acme/app"],
+        "mfa_required": True,
+    }
+    assert "scopes" not in projection
+    assert "audiences" not in projection
+    assert "provider_extension" not in projection
+    assert value["authority_edges"][0]["constraints"]["provider_extension"] == {"opaque": True}
 
 
 def test_supporting_edge_boundary_is_not_projected_as_path_crossing(tmp_path):
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     path_edge, support_edge = _fixture(store)
-    # Re-record supporting evidence with its own boundary; that boundary is audit
-    # context, not a traversed path crossing.
     support_with_boundary = store.record_edge(
         "credential:oauth-1",
         AuthorityRelationType.CAN_AUTHENTICATE_AS,
