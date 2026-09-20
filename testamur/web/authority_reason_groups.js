@@ -98,11 +98,34 @@
     return `<div class="authority-exact-evidence" data-evidence-role="${role === 'supporting_evidence' ? 'supporting_evidence' : 'authority_path'}"><div><strong>${evidenceRole}</strong><code>${escValue(edgeId)}</code></div>${source || target ? `<span>${escValue(source)} → ${escValue(target)}</span>` : ''}${semantics}<details><summary>Raw recorded edge</summary><pre>${escValue(JSON.stringify(record, null, 2))}</pre></details></div>`;
   }
 
+  function renderExactEvidenceCollection(records, role, escapeHtml) {
+    if (!Array.isArray(records) || !records.length) return '';
+    const canonicalRole = role === 'supporting_evidence' ? 'supporting_evidence' : 'authority_path';
+    return records
+      .filter(record => record && typeof record === 'object' && !Array.isArray(record))
+      .map(record => renderExactEvidenceRecord(record, canonicalRole, escapeHtml))
+      .join('');
+  }
+
+  function renderTrustBoundaryCrossing(crossing, escapeHtml) {
+    if (!crossing || typeof crossing !== 'object' || Array.isArray(crossing)) return '';
+    const escValue = typeof escapeHtml === 'function' ? escapeHtml : escapeFallback;
+    const boundary = crossing.boundary_ref || crossing.trust_boundary_ref;
+    if (!boundary) return '';
+    const source = crossing.source_ref || '';
+    const target = crossing.target_ref || '';
+    const edge = crossing.edge_id || '';
+    const pathIndex = Number.isInteger(crossing.path_index) ? crossing.path_index : null;
+    return `<div class="authority-exact-crossing" data-crossing-source="recorded-path-edge"><strong>${escValue(boundary)}</strong>${source || target ? `<span>${escValue(source)} → ${escValue(target)}</span>` : ''}${edge ? `<code>${escValue(edge)}</code>` : ''}${pathIndex !== null ? `<small>path edge ${pathIndex + 1}</small>` : ''}</div>`;
+  }
+
   // Export one narrow production presentation surface for authority.js.
   // Grouping comes exclusively from ProductService. Raw reasons are audit-only;
   // recorded constraints are display-only and are never validated in-browser.
   // Exact evidence records preserve the backend role: supporting evidence never
   // becomes an authority-path edge merely because it is connected to one.
+  // Boundary crossings are rendered only from backend-projected crossing records;
+  // the browser never derives a crossing from source/target connectivity.
   globalThis.testamurAuthorityReasonGroups = Object.freeze({
     canonicalReasonGroups,
     render: renderAuthorityReasonGroups,
@@ -110,5 +133,7 @@
     renderBlockedReasons,
     renderRecordedConstraintSemantics,
     renderExactEvidenceRecord,
+    renderExactEvidenceCollection,
+    renderTrustBoundaryCrossing,
   });
 })();
