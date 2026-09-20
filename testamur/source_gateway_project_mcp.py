@@ -4,7 +4,61 @@ from typing import Any, Mapping
 
 from . import source_gateway_mcp as _base
 from .advisory_write_route import record_advisory_assessment
+from .supply_chain import diff_project_supply_chain, scan_bound_project_supply_chain
 
+
+PROJECT_SCAN_TOOL = {
+    "name": "testamur.project_scan",
+    "title": "Scan a bound Project repository",
+    "description": (
+        "Append an immutable supply-chain scan observation for an explicitly bound existing Project. "
+        "A recorded dependency or change is evidence, not verification, reliance, invalidity, or affectedness."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "project_ref": {"type": "string"},
+            "binding": {"type": "string", "default": "primary"},
+        },
+        "required": ["project_ref"],
+        "additionalProperties": False,
+    },
+}
+
+PROJECT_SUPPLY_CHAIN_TOOL = {
+    "name": "testamur.project_supply_chain",
+    "title": "Read current Project supply chain",
+    "description": (
+        "Read the newest applicable immutable supply-chain scan projection for a Project. "
+        "Recorded dependencies are not automatically verified or relied upon."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {"project_ref": {"type": "string"}},
+        "required": ["project_ref"],
+        "additionalProperties": False,
+    },
+}
+
+PROJECT_SUPPLY_CHAIN_DIFF_TOOL = {
+    "name": "testamur.project_supply_chain_diff",
+    "title": "Compare Project supply-chain scans",
+    "description": (
+        "Mechanically compare immutable Project supply-chain scan observations. Added, removed, upgraded, "
+        "downgraded, or otherwise changed dependencies are change evidence only, never invalidity, safety, "
+        "affectedness, verification, or reliance verdicts."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "project_ref": {"type": "string"},
+            "from_scan_revision_id": {"type": "string"},
+            "to_scan_revision_id": {"type": "string"},
+        },
+        "required": ["project_ref"],
+        "additionalProperties": False,
+    },
+}
 
 PROJECT_REVALIDATION_TOOL = {
     "name": "testamur.project_advisory_revalidation",
@@ -75,6 +129,65 @@ PROJECT_ADVISORY_ASSESSMENT_TOOL = {
         "additionalProperties": False,
     },
 }
+
+
+def _project_scan(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    service = _base.TestamurProductService.integrated(_base._db_path())
+    result = scan_bound_project_supply_chain(
+        service,
+        _base._required(arguments, "project_ref"),
+        binding_name=str(arguments.get("binding") or "primary"),
+    )
+    return {
+        **result,
+        "schema": "testamur.mcp.project-supply-chain-scan.v1",
+        "semantics": {
+            "recorded_is_not_verified": True,
+            "recorded_is_not_relied": True,
+            "changed_is_not_invalid": True,
+            "lineage_is_not_affectedness_verdict": True,
+            "generic_trust_score_used": False,
+        },
+    }
+
+
+def _project_supply_chain(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    service = _base.TestamurProductService.integrated(_base._db_path())
+    detail = service.project(_base._required(arguments, "project_ref"))
+    if detail.get("ok") is not True:
+        return detail
+    return {
+        "ok": True,
+        "schema": "testamur.mcp.project-supply-chain.v1",
+        "project": detail["project"],
+        "supply_chain": detail.get("supply_chain"),
+        "semantics": {
+            "recorded_is_not_verified": True,
+            "recorded_is_not_relied": True,
+            "stale_is_not_false": True,
+            "generic_trust_score_used": False,
+        },
+    }
+
+
+def _project_supply_chain_diff(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    service = _base.TestamurProductService.integrated(_base._db_path())
+    result = diff_project_supply_chain(
+        service,
+        _base._required(arguments, "project_ref"),
+        from_scan_revision_id=arguments.get("from_scan_revision_id"),
+        to_scan_revision_id=arguments.get("to_scan_revision_id"),
+    )
+    result["schema"] = "testamur.mcp.project-supply-chain-diff.v1"
+    semantics = dict(result.get("semantics") or {})
+    semantics.update({
+        "changed_implies_invalid": False,
+        "dependency_change_implies_vulnerable": False,
+        "lineage_is_not_affectedness_verdict": True,
+        "generic_trust_score_used": False,
+    })
+    result["semantics"] = semantics
+    return result
 
 
 def _project_revalidation(arguments: Mapping[str, Any]) -> dict[str, Any]:
@@ -179,7 +292,14 @@ def _record_project_advisory_assessment(arguments: Mapping[str, Any]) -> dict[st
 
 
 def _install() -> None:
-    for tool in (PROJECT_REVALIDATION_TOOL, ADVISORY_ASSESSMENT_TOOL, PROJECT_ADVISORY_ASSESSMENT_TOOL):
+    for tool in (
+        PROJECT_SCAN_TOOL,
+        PROJECT_SUPPLY_CHAIN_TOOL,
+        PROJECT_SUPPLY_CHAIN_DIFF_TOOL,
+        PROJECT_REVALIDATION_TOOL,
+        ADVISORY_ASSESSMENT_TOOL,
+        PROJECT_ADVISORY_ASSESSMENT_TOOL,
+    ):
         if not any(existing.get("name") == tool["name"] for existing in _base.TOOLS):
             _base.TOOLS.append(tool)
     base_call = _base._call_tool
@@ -187,6 +307,12 @@ def _install() -> None:
         return
 
     def call_tool(name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
+        if name == PROJECT_SCAN_TOOL["name"]:
+            return _project_scan(arguments)
+        if name == PROJECT_SUPPLY_CHAIN_TOOL["name"]:
+            return _project_supply_chain(arguments)
+        if name == PROJECT_SUPPLY_CHAIN_DIFF_TOOL["name"]:
+            return _project_supply_chain_diff(arguments)
         if name == PROJECT_REVALIDATION_TOOL["name"]:
             return _project_revalidation(arguments)
         if name == ADVISORY_ASSESSMENT_TOOL["name"]:
