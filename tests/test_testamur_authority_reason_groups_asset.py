@@ -50,6 +50,16 @@ class AuthorityReasonGroupsAssetTest(unittest.TestCase):
         workbench = index.index('/authority.js')
         self.assertLess(helper, workbench)
 
+    def test_blocked_cards_delegate_grouping_to_canonical_renderer(self) -> None:
+        script = (WEB_ROOT / "authority.js").read_text(encoding="utf-8")
+        self.assertIn("testamurAuthorityReasonGroups", script)
+        self.assertIn("renderBlockedReasons(item, esc)", script)
+        self.assertIn("no client-side classification is attempted", script)
+        self.assertNotIn("const reasons = list(item.reasons", script)
+        self.assertNotIn("failure_reasons).map", script)
+        self.assertNotIn("reason.startsWith", script)
+        self.assertNotIn("reason.includes", script)
+
 
 if __name__ == "__main__":
     unittest.main()
