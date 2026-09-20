@@ -15,6 +15,17 @@ class ProjectRevalidationMcpTests(unittest.TestCase):
         self.assertIn("not an invalidity", description)
         self.assertIn("not generic verification", description)
 
+    def test_assessment_tool_accepts_evidence_not_caller_verdict(self) -> None:
+        tool = project_mcp.ADVISORY_ASSESSMENT_TOOL
+        self.assertEqual(tool["name"], "testamur.record_advisory_assessment")
+        properties = tool["inputSchema"]["properties"]
+        self.assertIn("evidence", properties)
+        self.assertIn("basis", properties)
+        self.assertNotIn("verdict", properties)
+        self.assertNotIn("state", properties)
+        self.assertNotIn("trust_score", properties)
+        self.assertFalse(tool["inputSchema"]["additionalProperties"])
+
     def test_projection_delegates_to_canonical_project_surface(self) -> None:
         detail = {
             "ok": True,
@@ -38,12 +49,35 @@ class ProjectRevalidationMcpTests(unittest.TestCase):
         self.assertTrue(semantics["stale_is_not_false"])
         self.assertFalse(semantics["generic_trust_score_used"])
 
-    def test_install_adds_tool_without_replacing_existing_tools(self) -> None:
+    def test_assessment_delegates_to_canonical_write_route(self) -> None:
+        service = object()
+        recorded = {"assessment_id": "aas_1", "state": "unknown"}
+        arguments = {
+            "event_revision_id": "rev_adv_1",
+            "subject_revision": "sha256:abc",
+            "evidence": [{"kind": "mechanical"}],
+            "basis": [{"kind": "scanner"}],
+        }
+        with patch.object(base.TestamurProductService, "integrated", return_value=service), patch.object(
+            project_mcp, "record_advisory_assessment", return_value=recorded
+        ) as canonical:
+            payload = project_mcp._record_advisory_assessment(arguments)
+        canonical.assert_called_once_with(service, arguments)
+        self.assertEqual(payload["assessment"], recorded)
+        semantics = payload["semantics"]
+        self.assertTrue(semantics["recorded_is_not_verified"])
+        self.assertTrue(semantics["recorded_is_not_relied"])
+        self.assertTrue(semantics["lineage_is_not_affectedness_verdict"])
+        self.assertFalse(semantics["caller_supplies_verdict"])
+        self.assertFalse(semantics["generic_trust_score_used"])
+
+    def test_install_adds_tools_without_replacing_existing_tools(self) -> None:
         before = {tool["name"] for tool in base.TOOLS}
         project_mcp._install()
         after = {tool["name"] for tool in base.TOOLS}
         self.assertTrue(before.issubset(after))
         self.assertIn("testamur.project_advisory_revalidation", after)
+        self.assertIn("testamur.record_advisory_assessment", after)
 
 
 if __name__ == "__main__":
