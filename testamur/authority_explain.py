@@ -14,17 +14,46 @@ def _required(value: Any, *, field: str) -> str:
     return text
 
 
+# Presentation aliases only. Presence is significant: omitted values remain unknown
+# and are never projected as unrestricted/valid. Values are copied verbatim.
+_CONSTRAINT_PROJECTION_KEYS = {
+    "required_audiences": "audiences",
+    "required_scopes": "scopes",
+    "issuer": "issuer",
+    "tenant": "tenant",
+    "binding": "binding",
+    "expires_at": "expires_at",
+    "valid_until": "valid_until",
+    "resource": "resource",
+    "resources": "resources",
+    "repository": "repository",
+    "repositories": "repositories",
+    "approval_required": "approval_required",
+    "mfa_required": "mfa_required",
+}
+
+
+def _project_recorded_constraints(constraints: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        projected: constraints[recorded]
+        for recorded, projected in _CONSTRAINT_PROJECTION_KEYS.items()
+        if recorded in constraints
+    }
+
+
 def _project_edge(edge: Mapping[str, Any], *, index: int | None = None) -> dict[str, Any]:
     evidence = [dict(item) for item in edge.get("evidence") or [] if isinstance(item, Mapping)]
     evidence_classes = sorted({str(item.get("evidence_class") or "") for item in evidence if str(item.get("evidence_class") or "")})
     boundaries = sorted({str(ref) for ref in edge.get("boundary_refs") or [] if str(ref)})
+    constraints = dict(edge.get("constraints") or {})
     projected = {
         "edge_id": str(edge["edge_id"]),
         "source_ref": str(edge["source_ref"]),
         "target_ref": str(edge["target_ref"]),
         "relation_type": str(edge["relation_type"]),
         "capabilities": list(edge.get("capabilities") or []),
-        "constraints": dict(edge.get("constraints") or {}),
+        "constraints": constraints,
+        "recorded_constraint_semantics": _project_recorded_constraints(constraints),
         "boundary_refs": boundaries,
         "evidence": evidence,
         "evidence_classes": evidence_classes,
@@ -115,10 +144,6 @@ def explain_authority_path(
         subject = store.maybe_subject(ref)
         subjects.append({"subject_ref": ref, "recorded_subject": subject, "subject_record_available": subject is not None})
 
-    # Canonical structured projections are aliases of the exact hydrated records,
-    # not a second evaluator. In particular, supporting evidence is not inserted
-    # into authority_edges and boundary crossings are emitted only for boundary_refs
-    # recorded on traversed authority edges.
     return {
         "schema_version": "testamur.authority-path-explanation.v1",
         "starting_ref": expected_source,
@@ -141,6 +166,8 @@ def explain_authority_path(
             "supporting_edges_are_not_forced_into_path_contiguity": True,
             "supporting_evidence_is_not_authority_path": True,
             "boundary_crossings_require_recorded_path_boundary_refs": True,
+            "recorded_constraint_projection_is_not_validation": True,
+            "omitted_constraint_is_unknown_not_unrestricted": True,
             "path_does_not_prove_action_was_exercised": True,
             "declared_evidence_is_not_promoted_to_observed": True,
         },
