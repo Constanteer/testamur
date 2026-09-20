@@ -26,6 +26,16 @@ class ProjectRevalidationMcpTests(unittest.TestCase):
         self.assertNotIn("trust_score", properties)
         self.assertFalse(tool["inputSchema"]["additionalProperties"])
 
+    def test_project_assessment_tool_requires_project_candidate_identity(self) -> None:
+        tool = project_mcp.PROJECT_ADVISORY_ASSESSMENT_TOOL
+        self.assertEqual(tool["name"], "testamur.record_project_advisory_assessment")
+        properties = tool["inputSchema"]["properties"]
+        self.assertIn("project_ref", properties)
+        self.assertNotIn("verdict", properties)
+        self.assertNotIn("state", properties)
+        self.assertNotIn("trust_score", properties)
+        self.assertFalse(tool["inputSchema"]["additionalProperties"])
+
     def test_projection_delegates_to_canonical_project_surface(self) -> None:
         detail = {
             "ok": True,
@@ -71,6 +81,57 @@ class ProjectRevalidationMcpTests(unittest.TestCase):
         self.assertFalse(semantics["caller_supplies_verdict"])
         self.assertFalse(semantics["generic_trust_score_used"])
 
+    def test_project_assessment_validates_current_candidate_then_delegates(self) -> None:
+        service = object()
+        detail = {
+            "ok": True,
+            "project": {"project_id": "prj_1"},
+            "supply_chain": {
+                "advisory_revalidation": {
+                    "reviews": [{
+                        "event_revision_id": "rev_adv_1",
+                        "subjects": [{"subject_revision": "sha256:abc", "requires_review": True}],
+                    }]
+                }
+            },
+        }
+        arguments = {
+            "project_ref": "prj_1",
+            "event_revision_id": "rev_adv_1",
+            "subject_revision": "sha256:abc",
+            "evidence": [{"kind": "mechanical"}],
+            "basis": [{"kind": "scanner"}],
+        }
+        recorded = {"assessment_id": "aas_1", "state": "UNKNOWN"}
+        with patch.object(base.TestamurProductService, "integrated", return_value=service), patch.object(
+            base, "project_with_advisory_reviews", return_value=detail
+        ), patch.object(project_mcp, "record_advisory_assessment", return_value=recorded) as canonical:
+            payload = project_mcp._record_project_advisory_assessment(arguments)
+        canonical.assert_called_once_with(service, {key: value for key, value in arguments.items() if key != "project_ref"})
+        self.assertEqual(payload["assessment"], recorded)
+        self.assertTrue(payload["semantics"]["candidate_membership_is_not_affectedness_verdict"])
+        self.assertFalse(payload["semantics"]["caller_supplies_verdict"])
+
+    def test_project_assessment_rejects_identity_outside_current_candidates(self) -> None:
+        detail = {
+            "ok": True,
+            "project": {"project_id": "prj_1"},
+            "supply_chain": {"advisory_revalidation": {"reviews": []}},
+        }
+        arguments = {
+            "project_ref": "prj_1",
+            "event_revision_id": "rev_adv_other",
+            "subject_revision": "sha256:other",
+            "evidence": [],
+            "basis": [],
+        }
+        with patch.object(base.TestamurProductService, "integrated", return_value=object()), patch.object(
+            base, "project_with_advisory_reviews", return_value=detail
+        ), patch.object(project_mcp, "record_advisory_assessment") as canonical:
+            with self.assertRaisesRegex(ValueError, "not a current exact advisory candidate"):
+                project_mcp._record_project_advisory_assessment(arguments)
+        canonical.assert_not_called()
+
     def test_install_adds_tools_without_replacing_existing_tools(self) -> None:
         before = {tool["name"] for tool in base.TOOLS}
         project_mcp._install()
@@ -78,6 +139,7 @@ class ProjectRevalidationMcpTests(unittest.TestCase):
         self.assertTrue(before.issubset(after))
         self.assertIn("testamur.project_advisory_revalidation", after)
         self.assertIn("testamur.record_advisory_assessment", after)
+        self.assertIn("testamur.record_project_advisory_assessment", after)
 
 
 if __name__ == "__main__":
