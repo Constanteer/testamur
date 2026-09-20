@@ -6,10 +6,26 @@ from typing import Any, Mapping
 _AUTHORITY_PRODUCT_SCHEMA = "testamur.product.authority-result.v1"
 _AUTHORITY_RESULT_SCHEMA = "testamur.authority-product-result.v1"
 _AUTHORITY_DIAGNOSTICS_SCHEMA = "testamur.authority-product-diagnostics.v1"
+_REASON_GROUPS = (
+    "credential_or_token",
+    "capability_or_delegation",
+    "approval_or_mfa",
+    "trust_boundary_policy",
+    "other",
+)
 
 
 def _copy_capability(value: Mapping[str, Any]) -> dict[str, Any]:
     return dict(value)
+
+
+def _copy_reason_groups(value: Any) -> dict[str, list[str]]:
+    """Copy ProductService's canonical groups; Web never classifies raw reasons."""
+    source = value if isinstance(value, Mapping) else {}
+    return {
+        key: [str(reason) for reason in source.get(key) or []]
+        for key in _REASON_GROUPS
+    }
 
 
 def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -18,6 +34,8 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
     Presentation only: no connectivity, lineage, reliance, affectedness, or UI
     adjacency can create authority. Exact denied candidates and inherited delegation
     budgets remain diagnostic evidence and are never promoted to capabilities.
+    Canonical denial groups pass through unchanged in meaning; Web does not infer
+    them from raw reason strings.
     """
     if payload.get("ok") is not True:
         return dict(payload)
@@ -44,6 +62,7 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "relation_type": item.get("relation_type"),
             "reachability_class": item.get("reachability_class"),
             "reasons": list(item.get("reasons") or []),
+            "reason_groups": _copy_reason_groups(item.get("reason_groups")),
             "failed_constraints": list(item.get("failed_constraints") or []),
             "unresolved_constraints": list(item.get("unresolved_constraints") or []),
             "path_edge_ids": list(item.get("path_edge_ids") or []),
@@ -81,6 +100,7 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "affectedness_does_not_seed_compromise": True,
             "reachable_does_not_mean_exercised": True,
             "denied_budget_is_diagnostic_not_authority": True,
+            "reason_groups_are_canonical_not_web_inferred": True,
         },
     }
 
