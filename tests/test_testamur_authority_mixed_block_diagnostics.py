@@ -58,6 +58,11 @@ def test_mixed_block_reasons_keep_independent_reason_and_exact_capability_diagno
     assert blocked["unresolved_constraints"] == []
     assert blocked["candidate_capabilities"] == diagnostic["candidate_capabilities"]
     assert blocked["inherited_capability_budget"] == diagnostic["inherited_capability_budget"]
+    assert blocked["reason_groups"]["approval_or_mfa"] == ["approval_gate_unsatisfied"]
+    assert blocked["reason_groups"]["capability_or_delegation"] == [
+        "audience_outside_delegation"
+    ]
+    assert blocked["reason_groups"]["credential_or_token"] == []
 
 
 def test_non_capability_block_is_not_reinterpreted_as_authority_failure():
@@ -76,5 +81,25 @@ def test_non_capability_block_is_not_reinterpreted_as_authority_failure():
     ) as diagnostics:
         enriched = _enrich_blocked(_Store(), result)
 
-    assert enriched == result
+    blocked = enriched["blocked_transitions"][0]
+    assert blocked["reasons"] == ["credential_expired"]
+    assert blocked["reason_groups"]["credential_or_token"] == ["credential_expired"]
+    assert blocked["reason_groups"]["capability_or_delegation"] == []
     diagnostics.assert_not_called()
+
+
+def test_unknown_block_reason_stays_visible_without_semantic_inference():
+    result = {
+        "blocked_transitions": [
+            {
+                "edge_id": "edge:candidate",
+                "path_edge_ids": ["edge:candidate"],
+                "reasons": ["provider_specific_unknown_gate"],
+            }
+        ]
+    }
+
+    enriched = _enrich_blocked(_Store(), result)
+    blocked = enriched["blocked_transitions"][0]
+    assert blocked["reasons"] == ["provider_specific_unknown_gate"]
+    assert blocked["reason_groups"]["other"] == ["provider_specific_unknown_gate"]
