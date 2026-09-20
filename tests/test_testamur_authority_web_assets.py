@@ -60,6 +60,8 @@ class AuthorityWebAssetsTest(unittest.TestCase):
         self.assertIn(".authority-blocked", styles)
         self.assertIn(".authority-budget", styles)
         self.assertIn(".authority-crossing", styles)
+        self.assertIn(".authority-explanation", styles)
+        self.assertIn("[data-authority-explain]", styles)
 
     def test_production_router_serves_authority_route_and_assets(self) -> None:
         # Static/SPA reads do not consult the ProductService; passing None makes
