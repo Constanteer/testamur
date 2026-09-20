@@ -26,7 +26,6 @@ _CAPABILITY_REASON_MARKERS = (
     "scope",
     "audience",
     "resource",
-    "provider",
 )
 _CREDENTIAL_REASON_MARKERS = (
     "credential",
