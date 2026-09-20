@@ -4,6 +4,24 @@ from collections import Counter
 from typing import Any, Mapping
 
 
+_REASON_GROUPS = (
+    "credential_or_token",
+    "capability_or_delegation",
+    "approval_or_mfa",
+    "trust_boundary_policy",
+    "other",
+)
+
+
+def _project_reason_groups(value: Any) -> dict[str, list[str]]:
+    """Copy canonical engine reason groups without reclassifying denial strings."""
+    source = value if isinstance(value, Mapping) else {}
+    return {
+        key: sorted({str(reason) for reason in source.get(key) or []})
+        for key in _REASON_GROUPS
+    }
+
+
 def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     """Stable product projection for authority reachability diagnostics.
 
@@ -11,7 +29,8 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     lineage, reliance, or affectedness into authority and it never treats a blocked
     transition as a weaker permission. Exact path/support edge IDs and exact denied
     capability budgets are retained so clients never reconstruct permissions from
-    graph adjacency.
+    graph adjacency. Canonical denial reason groups are copied from the engine;
+    this layer never classifies reason strings itself.
     """
     blocked = list(result.get("blocked_transitions") or [])
     reason_counts: Counter[str] = Counter()
@@ -33,6 +52,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "relation_type": item.get("relation_type"),
                 "reachability_class": item.get("reachability_class"),
                 "reasons": reasons,
+                "reason_groups": _project_reason_groups(item.get("reason_groups")),
                 "failed_constraints": failed,
                 "unresolved_constraints": unresolved,
                 "path_edge_ids": list(item.get("path_edge_ids") or []),
@@ -61,6 +81,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
             "connectivity_is_not_authorization": True,
             "lineage_is_not_authority": True,
             "denied_budget_is_diagnostic_not_authority": True,
+            "reason_groups_are_engine_recorded_not_product_inferred": True,
         },
     }
 
