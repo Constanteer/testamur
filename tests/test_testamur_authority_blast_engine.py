@@ -9,24 +9,25 @@ from testamur.authority_blast_engine import canonical_authority_blast_radius
 def _store(tmp_path) -> TestamurAuthorityStore:
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     for ref in ("principal:a", "principal:b"):
-        store.upsert_subject(subject_ref=ref, kind=AuthoritySubjectKind.PRINCIPAL)
-    store.upsert_subject(subject_ref="resource:r", kind=AuthoritySubjectKind.RESOURCE)
-    store.add_edge(
-        edge_id="edge:a-read",
-        source_ref="principal:a",
-        target_ref="resource:r",
-        relation_type=AuthorityRelationType.CAN_READ,
-        capabilities=[{"namespace": "resource", "action": "read"}],
-        evidence=[{"evidence_class": "OBSERVED", "ref": "evidence:a"}],
+        store.record_subject(
+            AuthoritySubjectKind.PRINCIPAL,
+            label=ref,
+            subject_ref=ref,
+        )
+    store.record_subject(
+        AuthoritySubjectKind.RESOURCE,
+        label="resource:r",
+        subject_ref="resource:r",
     )
-    store.add_edge(
-        edge_id="edge:b-read",
-        source_ref="principal:b",
-        target_ref="resource:r",
-        relation_type=AuthorityRelationType.CAN_READ,
-        capabilities=[{"namespace": "resource", "action": "read"}],
-        evidence=[{"evidence_class": "OBSERVED", "ref": "evidence:b"}],
-    )
+    for seed in ("a", "b"):
+        store.record_edge(
+            f"principal:{seed}",
+            AuthorityRelationType.CAN_READ,
+            "resource:r",
+            edge_id=f"edge:{seed}-read",
+            capabilities=[{"namespace": "resource", "action": "read"}],
+            evidence=[{"evidence_class": "OBSERVED", "ref": f"evidence:{seed}"}],
+        )
     return store
 
 
