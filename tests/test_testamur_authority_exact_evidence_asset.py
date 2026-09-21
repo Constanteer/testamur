@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 ASSET = Path(__file__).parents[1] / "testamur" / "web" / "authority_reason_groups.js"
+AUTHORITY_ASSET = Path(__file__).parents[1] / "testamur" / "web" / "authority.js"
 
 
 def test_exact_evidence_renderer_preserves_path_vs_supporting_roles():
@@ -22,11 +23,10 @@ def test_exact_evidence_renderer_only_projects_recorded_constraint_semantics():
     assert "renderRecordedConstraintSemantics(record" in source
     assert "recorded does not mean valid" in source
     assert "omitted does not mean unrestricted" in source
-    # Presentation must not become a graph/authorization evaluator.
     assert "findPath" not in source
     assert "shortestPath" not in source
     assert "item.constraints" not in source
-    assert "lineage" in source  # only in the explicit non-inference module contract
+    assert "lineage" in source
 
 
 def test_supporting_evidence_is_not_promoted_by_connectivity():
@@ -44,3 +44,18 @@ def test_trust_boundary_renderer_consumes_only_projected_crossings():
     assert "crossing.edge_id" in source
     assert "crossing.path_index" in source
     assert "browser never derives a crossing" in source
+
+
+def test_authority_inspector_uses_canonical_exact_evidence_renderers():
+    source = AUTHORITY_ASSET.read_text(encoding="utf-8")
+    assert "renderer.renderExactEvidenceCollection(edges, 'authority_path', esc)" in source
+    assert "renderer.renderExactEvidenceCollection(evidence, 'supporting_evidence', esc)" in source
+    assert "renderer.renderTrustBoundaryCrossing(item, esc)" in source
+    assert "Canonical exact-evidence renderer unavailable" in source
+    # The inspector must not fall back to its old local raw-record rendering.
+    inspector = source[source.index("function explanationInspector"):source.index("async function explainExactPath")]
+    assert "pretty(edge)" not in inspector
+    assert "pretty(item)" not in inspector
+    assert "crossingCard" not in inspector
+    assert "findPath" not in inspector
+    assert "shortestPath" not in inspector
