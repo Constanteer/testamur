@@ -37,10 +37,23 @@ def _binding_evidence(value: Any) -> list[dict[str, Any]]:
     return result
 
 
+def _recorded_seed_refs(value: Any) -> list[str]:
+    """Normalize only seed provenance explicitly recorded on an authority action.
+
+    Missing provenance remains unknown/empty.  It is never reconstructed from the
+    envelope's global compromised_refs, graph connectivity, lineage, or reliance.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise ValueError("authority_action.compromise_seed_refs must be a sequence")
+    return sorted({_required(item, field="authority_action.compromise_seed_refs[]") for item in value})
+
+
 def _binding_matches_receipt(binding: Mapping[str, Any], *, relied_object_ref: str, pinned: Mapping[str, Any]) -> tuple[bool, bool, bool]:
     """Match every identity dimension explicitly recorded by the binding.
 
-    A compound object+revision binding is conjunctive.  Matching either half is
+    A compound object+revision binding is conjunctive. Matching either half is
     insufficient: otherwise an authority target could be projected onto a
     different relied object merely because one revision ref happened to match.
     Missing dimensions remain unspecified; they are never inferred.
@@ -60,9 +73,10 @@ def _binding_matches_receipt(binding: Mapping[str, Any], *, relied_object_ref: s
 def authority_reliance_impact(authority_result: Mapping[str, Any], reliance_store: RelianceReceiptView, *, scope_ref: str, bindings: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Project actionable authority onto actual durable Reliance receipts.
 
-    Authority and material reliance remain separate graphs.  Projection requires
+    Authority and material reliance remain separate graphs. Projection requires
     an evidence-bearing, exact binding; connectivity or display-label similarity
-    never creates resource identity.
+    never creates resource identity. Compromise-seed provenance is carried only
+    when the authority engine recorded it on the exact action/path being bound.
     """
     scope = _required(scope_ref, field="scope_ref")
     actions = authority_result.get("actionable_capabilities")
@@ -96,9 +110,10 @@ def authority_reliance_impact(authority_result: Mapping[str, Any], reliance_stor
             raise ValueError("authority action entries must be mappings")
         action = dict(raw_action)
         target_ref = _required(action.get("target_ref"), field="authority_action.target_ref")
+        seed_refs = _recorded_seed_refs(action.get("compromise_seed_refs"))
         target_bindings = normalized_bindings.get(target_ref, [])
         if not target_bindings:
-            unmatched_actions.append({"target_ref": target_ref, "capability": action.get("capability"), "path_edge_ids": list(action.get("path_edge_ids") or []), "reason": "no_explicit_authority_to_reliance_binding"})
+            unmatched_actions.append({"target_ref": target_ref, "capability": action.get("capability"), "path_edge_ids": list(action.get("path_edge_ids") or []), "compromise_seed_refs": seed_refs, "reason": "no_explicit_authority_to_reliance_binding"})
             continue
         matched_any = False
         for binding in target_bindings:
@@ -118,16 +133,16 @@ def authority_reliance_impact(authority_result: Mapping[str, Any], reliance_stor
                 capability = action.get("capability")
                 capability = dict(capability) if isinstance(capability, Mapping) else {}
                 path = tuple(str(item) for item in action.get("path_edge_ids") or [])
-                key = (receipt_id, binding["binding_ref"], target_ref, str(capability.get("namespace") or ""), str(capability.get("action") or ""), str(capability.get("resource") or ""), path)
+                key = (receipt_id, binding["binding_ref"], target_ref, str(capability.get("namespace") or ""), str(capability.get("action") or ""), str(capability.get("resource") or ""), path, tuple(seed_refs))
                 if key in seen:
                     continue
                 seen.add(key)
-                impacts.append({"receipt_id": receipt_id, "reliant_ref": reliant_ref, "reliant_revision_ref": receipt.get("reliant_revision_ref"), "relied_object_ref": relied_object_ref, "authority_target_ref": target_ref, "binding_ref": binding["binding_ref"], "binding_evidence": binding["evidence"], "object_match": object_match, "revision_match": revision_match, "capability": capability, "authority_path_edge_ids": list(path), "authority_evidence_state": action.get("evidence_state"), "review_required": True})
+                impacts.append({"receipt_id": receipt_id, "reliant_ref": reliant_ref, "reliant_revision_ref": receipt.get("reliant_revision_ref"), "relied_object_ref": relied_object_ref, "authority_target_ref": target_ref, "binding_ref": binding["binding_ref"], "binding_evidence": binding["evidence"], "object_match": object_match, "revision_match": revision_match, "capability": capability, "authority_path_edge_ids": list(path), "compromise_seed_refs": seed_refs, "authority_evidence_state": action.get("evidence_state"), "review_required": True})
         if not matched_any:
-            unmatched_actions.append({"target_ref": target_ref, "capability": action.get("capability"), "path_edge_ids": list(action.get("path_edge_ids") or []), "reason": "explicit_binding_did_not_match_any_durable_reliance"})
+            unmatched_actions.append({"target_ref": target_ref, "capability": action.get("capability"), "path_edge_ids": list(action.get("path_edge_ids") or []), "compromise_seed_refs": seed_refs, "reason": "explicit_binding_did_not_match_any_durable_reliance"})
 
-    impacts.sort(key=lambda item: (str(item["reliant_ref"]), str(item["receipt_id"]), str(item["authority_target_ref"]), str(item["capability"].get("namespace") or ""), str(item["capability"].get("action") or ""), tuple(item["authority_path_edge_ids"])))
-    return {"schema_version": "testamur.authority-reliance-impact.v1", "scope_ref": scope, "impact_count": len(impacts), "affected_reliant_refs": sorted({str(item["reliant_ref"]) for item in impacts}), "impacts": impacts, "unmatched_actions": unmatched_actions, "semantics": {"authority_does_not_imply_reliance": True, "resource_identity_is_never_guessed": True, "compound_bindings_are_conjunctive": True, "actual_durable_reliance_only": True, "reachable_does_not_mean_exercised": True, "authority_reachability_triggers_review_not_falsehood": True}}
+    impacts.sort(key=lambda item: (str(item["reliant_ref"]), str(item["receipt_id"]), str(item["authority_target_ref"]), str(item["capability"].get("namespace") or ""), str(item["capability"].get("action") or ""), tuple(item["authority_path_edge_ids"]), tuple(item["compromise_seed_refs"])))
+    return {"schema_version": "testamur.authority-reliance-impact.v1", "scope_ref": scope, "impact_count": len(impacts), "affected_reliant_refs": sorted({str(item["reliant_ref"]) for item in impacts}), "impacts": impacts, "unmatched_actions": unmatched_actions, "semantics": {"authority_does_not_imply_reliance": True, "resource_identity_is_never_guessed": True, "compound_bindings_are_conjunctive": True, "actual_durable_reliance_only": True, "reachable_does_not_mean_exercised": True, "authority_reachability_triggers_review_not_falsehood": True, "compromise_seed_provenance_is_engine_recorded_not_reliance_inferred": True}}
 
 
 __all__ = ["RelianceReceiptView", "authority_reliance_impact"]
