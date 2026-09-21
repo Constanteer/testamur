@@ -119,4 +119,36 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
     }
 
 
-__all__ = ["aggregate_seeded_blast_results"]
+def build_blast_radius_result(
+    results: Sequence[Mapping[str, Any]],
+    *,
+    compromised_refs: Sequence[str],
+    compromise_model: str,
+) -> dict[str, Any]:
+    """Build the canonical blast-radius envelope from per-seed engine results.
+
+    This is deliberately a projection over explicit reachability results.  It does
+    not traverse the authority graph, material lineage, reliance, or affectedness.
+    In particular, ``compromised_refs`` labels the assumed seeds but does not add
+    provenance to records that were not produced by that seed's reachability run.
+    """
+    seeds = sorted({str(ref).strip() for ref in compromised_refs if str(ref).strip()})
+    if not seeds:
+        raise ValueError("compromised_refs must contain at least one subject ref")
+    aggregated = aggregate_seeded_blast_results(results)
+    helper_semantics = dict(aggregated.pop("semantics", {}))
+    return {
+        "schema_version": "testamur.authority-blast-radius.v1",
+        "compromised_refs": seeds,
+        "compromise_model": str(compromise_model),
+        **aggregated,
+        "semantics": {
+            "blast_radius_is_potential_authority_not_observed_malicious_use": True,
+            "affectedness_does_not_automatically_seed_compromise": True,
+            "material_lineage_does_not_grant_authority": True,
+            **helper_semantics,
+        },
+    }
+
+
+__all__ = ["aggregate_seeded_blast_results", "build_blast_radius_result"]
