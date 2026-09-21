@@ -4,16 +4,18 @@ from typing import Any
 
 from .project_advisory_revalidation import project_advisory_revalidation
 from .project_advisory_review import project_advisory_reviews
+from .supply_chain import diff_project_supply_chain
 
 
 def project_with_advisory_reviews(service: Any, ref: str) -> dict[str, Any]:
-    """Return the canonical project projection with advisory review state attached.
+    """Return the canonical project projection with review and comparison work attached.
 
     The underlying project service remains authoritative for inventory and exact
     advisory/component identity overlap. This read-only composition adds current
-    immutable affectedness heads and a revalidation work projection; it does not
-    reinterpret overlap as affectedness, collapse competing heads, or manufacture
-    a trust score.
+    immutable affectedness heads, the latest mechanical scan comparison when two
+    observations exist, and a revalidation work projection. It does not reinterpret
+    overlap or version direction as affectedness, collapse competing heads, or
+    manufacture a trust score.
     """
 
     payload = dict(service.project(ref))
@@ -41,13 +43,27 @@ def project_with_advisory_reviews(service: Any, ref: str) -> dict[str, Any]:
 
     supply_chain_diff = enriched_supply_chain.get("diff")
     if not isinstance(supply_chain_diff, dict):
-        supply_chain_diff = None
+        try:
+            candidate_diff = diff_project_supply_chain(service, ref)
+        except ValueError as exc:
+            # Zero/one scan is normal first-run state. Preserve it as an explicit
+            # absence of comparison rather than manufacturing a changed/unchanged verdict.
+            candidate_diff = None
+            enriched_supply_chain["diff_unavailable_reason"] = str(exc)
+        if isinstance(candidate_diff, dict) and candidate_diff.get("ok") is True:
+            supply_chain_diff = candidate_diff
+            enriched_supply_chain["diff"] = candidate_diff
+        else:
+            supply_chain_diff = None
+
     enriched_supply_chain["advisory_revalidation"] = project_advisory_revalidation(
         reviews,
         supply_chain_diff=supply_chain_diff,
     )
     enriched_supply_chain["semantics"] = {
         **dict(enriched_supply_chain.get("semantics") or {}),
+        "latest_scan_diff_is_mechanical": True,
+        "version_direction_implies_safety": False,
         "advisory_review_is_read_projection": True,
         "advisory_revalidation_is_work_projection": True,
         "changed_implies_invalid": False,
