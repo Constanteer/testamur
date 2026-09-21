@@ -47,6 +47,7 @@ def test_canonical_blast_keeps_seed_provenance_bound_to_exact_path(tmp_path):
     assert by_path[("edge:a-read",)] == ["principal:a"]
     assert by_path[("edge:b-read",)] == ["principal:b"]
     assert result["semantics"]["material_lineage_does_not_create_seed_provenance"] is True
+    assert result["semantics"]["blast_results_are_bound_to_one_compromise_model"] is True
 
 
 def test_canonical_blast_uses_one_temporal_snapshot_for_all_seeds(tmp_path, monkeypatch):
@@ -112,6 +113,29 @@ def test_canonical_blast_rejects_inconsistent_engine_observation_instants(tmp_pa
 
     monkeypatch.setattr(reachability, "authority_reachability", inconsistent_reachability)
     with pytest.raises(ValueError, match="identical as_of"):
+        canonical_authority_blast_radius(
+            _store(tmp_path),
+            ["principal:a", "principal:b"],
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+        )
+
+
+def test_canonical_blast_rejects_engine_result_from_another_compromise_model(tmp_path, monkeypatch):
+    import testamur.authority_reachability_v2 as reachability
+
+    original = reachability.authority_reachability
+    calls = 0
+
+    def inconsistent_model(*args, **kwargs):
+        nonlocal calls
+        result = original(*args, **kwargs)
+        calls += 1
+        if calls == 2:
+            result["compromise_model"] = "READ_ONLY_COMPROMISE"
+        return result
+
+    monkeypatch.setattr(reachability, "authority_reachability", inconsistent_model)
+    with pytest.raises(ValueError, match="requested compromise model"):
         canonical_authority_blast_radius(
             _store(tmp_path),
             ["principal:a", "principal:b"],
