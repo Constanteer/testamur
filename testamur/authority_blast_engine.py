@@ -7,6 +7,9 @@ from .authority import TestamurAuthorityStore
 from .authority_blast_provenance import build_blast_radius_result
 
 
+_REACHABILITY_SCHEMA_VERSION = "testamur.authority-reachability.v1"
+
+
 def canonical_authority_blast_radius(
     store: TestamurAuthorityStore,
     compromised_refs: str | Sequence[str],
@@ -38,6 +41,13 @@ def canonical_authority_blast_radius(
     for this evaluation. A result produced under another compromise assumption
     cannot be mixed into the same blast envelope, even if its seed/path happens
     to match. This keeps model assumptions as provenance rather than presentation.
+
+    Finally, every returned reachability envelope is bound to the exact seed whose
+    traversal produced it. Merely returning the right *set* of seed refs is not
+    sufficient: a swapped or mislabeled result would attach exact evidence and
+    capabilities to the wrong compromise assumption. The schema version is also
+    checked before aggregation so an unrelated projection cannot masquerade as an
+    engine reachability result.
     """
     # Local import avoids making the reachability module depend on this orchestration
     # while it still exposes the legacy authority_blast_radius entry point.
@@ -50,8 +60,9 @@ def canonical_authority_blast_radius(
 
     model = _normalize_model(compromise_model)
     evaluation_as_of: str | datetime = as_of if as_of is not None else datetime.now(timezone.utc)
-    results = [
-        authority_reachability(
+    results: list[dict[str, Any]] = []
+    for seed_ref in seeds:
+        result = authority_reachability(
             store,
             seed_ref,
             compromise_model=model,
@@ -61,8 +72,11 @@ def canonical_authority_blast_radius(
             expansion_budget=expansion_budget,
             as_of=evaluation_as_of,
         )
-        for seed_ref in seeds
-    ]
+        if str(result.get("schema_version") or "").strip() != _REACHABILITY_SCHEMA_VERSION:
+            raise ValueError("authority reachability returned an unsupported schema version")
+        if str(result.get("starting_subject_ref") or "").strip() != seed_ref:
+            raise ValueError("authority reachability result does not match requested compromise seed")
+        results.append(result)
 
     observation_instants = {str(result.get("as_of") or "").strip() for result in results}
     if "" in observation_instants or len(observation_instants) != 1:
@@ -82,6 +96,8 @@ def canonical_authority_blast_radius(
         **dict(envelope.get("semantics") or {}),
         "blast_results_share_one_observation_instant": True,
         "blast_results_are_bound_to_one_compromise_model": True,
+        "blast_results_are_bound_to_requested_seed_traversals": True,
+        "blast_results_require_authority_reachability_schema": True,
     }
     return envelope
 
