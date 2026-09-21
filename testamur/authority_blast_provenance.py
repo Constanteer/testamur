@@ -33,8 +33,9 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
     targets, material lineage, reliance, and affectedness never create provenance.
 
     Aggregate metadata is likewise copied only from engine-recorded reachability
-    results: trust-boundary crossings are deduplicated by exact edge/boundary pair,
-    and truncation is the union of recorded per-seed truncation reasons. Neither is
+    results. Trust-boundary crossings are deduplicated by exact edge/boundary pair
+    while retaining the seeds whose engine results actually recorded the crossing.
+    Truncation is the union of recorded per-seed truncation reasons. Neither is
     reconstructed from graph adjacency.
     """
     subjects: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
@@ -75,7 +76,8 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
             edge_id = str(crossing.get("edge_id") or "").strip()
             boundary_ref = str(crossing.get("boundary_ref") or "").strip()
             if edge_id and boundary_ref:
-                crossings[(edge_id, boundary_ref)] = dict(crossing)
+                key = (edge_id, boundary_ref)
+                crossings[key] = _merge_record(crossings.get(key), crossing, seed_ref)
 
         for reason in result.get("truncation_reasons") or []:
             text = str(reason).strip()
@@ -114,6 +116,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
             "same_target_does_not_merge_distinct_paths": True,
             "material_lineage_does_not_create_seed_provenance": True,
             "trust_boundary_crossings_are_engine_recorded_not_reconstructed": True,
+            "trust_boundary_crossing_seed_provenance_is_engine_recorded": True,
             "truncation_is_union_of_per_seed_engine_results": True,
         },
     }
@@ -127,7 +130,7 @@ def build_blast_radius_result(
 ) -> dict[str, Any]:
     """Build the canonical blast-radius envelope from per-seed engine results.
 
-    This is deliberately a projection over explicit reachability results.  It does
+    This is deliberately a projection over explicit reachability results. It does
     not traverse the authority graph, material lineage, reliance, or affectedness.
     In particular, ``compromised_refs`` labels the assumed seeds but does not add
     provenance to records that were not produced by that seed's reachability run.
