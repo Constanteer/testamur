@@ -48,6 +48,8 @@ def test_canonical_blast_keeps_seed_provenance_bound_to_exact_path(tmp_path):
     assert by_path[("edge:b-read",)] == ["principal:b"]
     assert result["semantics"]["material_lineage_does_not_create_seed_provenance"] is True
     assert result["semantics"]["blast_results_are_bound_to_one_compromise_model"] is True
+    assert result["semantics"]["blast_results_are_bound_to_requested_seed_traversals"] is True
+    assert result["semantics"]["blast_results_require_authority_reachability_schema"] is True
 
 
 def test_canonical_blast_uses_one_temporal_snapshot_for_all_seeds(tmp_path, monkeypatch):
@@ -139,6 +141,45 @@ def test_canonical_blast_rejects_engine_result_from_another_compromise_model(tmp
         canonical_authority_blast_radius(
             _store(tmp_path),
             ["principal:a", "principal:b"],
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+        )
+
+
+def test_canonical_blast_rejects_result_mislabeled_as_another_requested_seed(tmp_path, monkeypatch):
+    import testamur.authority_reachability_v2 as reachability
+
+    original = reachability.authority_reachability
+
+    def mislabeled_seed(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result["starting_subject_ref"] == "principal:a":
+            result["starting_subject_ref"] = "principal:b"
+        return result
+
+    monkeypatch.setattr(reachability, "authority_reachability", mislabeled_seed)
+    with pytest.raises(ValueError, match="requested compromise seed"):
+        canonical_authority_blast_radius(
+            _store(tmp_path),
+            ["principal:a", "principal:b"],
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+        )
+
+
+def test_canonical_blast_rejects_non_reachability_schema(tmp_path, monkeypatch):
+    import testamur.authority_reachability_v2 as reachability
+
+    original = reachability.authority_reachability
+
+    def wrong_schema(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result["schema_version"] = "testamur.authority-blast-radius.v1"
+        return result
+
+    monkeypatch.setattr(reachability, "authority_reachability", wrong_schema)
+    with pytest.raises(ValueError, match="unsupported schema version"):
+        canonical_authority_blast_radius(
+            _store(tmp_path),
+            ["principal:a"],
             compromise_model="FULL_SUBJECT_COMPROMISE",
         )
 
