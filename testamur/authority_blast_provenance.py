@@ -7,14 +7,7 @@ from .authority_projection import capability_identity
 
 
 def _seed_refs(item: Mapping[str, Any], seed_ref: str) -> list[str]:
-    """Return provenance that is valid for this exact per-seed traversal.
-
-    A per-seed reachability result is authoritative only for its own
-    ``starting_subject_ref``. Nested records therefore cannot smuggle a different
-    compromise seed into the aggregate merely by carrying a ``compromise_seed_refs``
-    field. Existing recorded provenance is accepted only when it names the current
-    traversal seed; malformed or cross-seed provenance fails closed.
-    """
+    """Return provenance that is valid for this exact per-seed traversal."""
     seed = str(seed_ref).strip()
     recorded = item.get("compromise_seed_refs")
     if recorded is None:
@@ -46,22 +39,17 @@ def _merge_record(existing: dict[str, Any] | None, item: Mapping[str, Any], seed
 def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Aggregate per-seed reachability without inventing cross-seed authority.
 
-    Each result must be an engine reachability result with ``starting_subject_ref``.
-    Records are merged only when their canonical identity *and exact path* match.
-    Seed provenance is unioned only across those independently recorded per-seed
-    results. Connectivity, common targets, material lineage, reliance, and
-    affectedness never create provenance.
-
-    Aggregate metadata is likewise copied only from engine-recorded reachability
-    results. Trust-boundary crossings are deduplicated by exact edge/boundary pair
-    while retaining the seeds whose engine results actually recorded the crossing.
-    Truncation is the union of recorded per-seed truncation reasons. Neither is
-    reconstructed from graph adjacency.
+    Records are merged only when their canonical identity and exact authority path
+    match. Trust-boundary crossings follow the same rule: the edge/boundary pair
+    alone is not sufficient identity because the same crossing can be reached via
+    distinct authority paths with different evidence and compromise provenance.
+    Connectivity, material lineage, reliance, and affectedness never create either
+    authority or crossing provenance.
     """
     subjects: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
     actions: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
     blocked: dict[tuple[str, str, str, tuple[str, ...]], dict[str, Any]] = {}
-    crossings: dict[tuple[str, str], dict[str, Any]] = {}
+    crossings: dict[tuple[str, str, tuple[str, ...], int], dict[str, Any]] = {}
     truncation_reasons: set[str] = set()
 
     for result in results:
@@ -95,8 +83,10 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
                 continue
             edge_id = str(crossing.get("edge_id") or "").strip()
             boundary_ref = str(crossing.get("boundary_ref") or "").strip()
+            path_edge_ids = tuple(str(edge).strip() for edge in crossing.get("path_edge_ids") or [] if str(edge).strip())
+            path_position = int(crossing.get("path_position") or 0)
             if edge_id and boundary_ref:
-                key = (edge_id, boundary_ref)
+                key = (edge_id, boundary_ref, path_edge_ids, path_position)
                 crossings[key] = _merge_record(crossings.get(key), crossing, seed_ref)
 
         for reason in result.get("truncation_reasons") or []:
@@ -107,6 +97,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
     crossing_values = sorted(
         crossings.values(),
         key=lambda item: (
+            tuple(item.get("path_edge_ids") or []),
             int(item.get("path_position") or 0),
             str(item.get("edge_id") or ""),
             str(item.get("boundary_ref") or ""),
@@ -138,6 +129,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
             "material_lineage_does_not_create_seed_provenance": True,
             "trust_boundary_crossings_are_engine_recorded_not_reconstructed": True,
             "trust_boundary_crossing_seed_provenance_is_engine_recorded": True,
+            "trust_boundary_crossings_preserve_exact_path_identity": True,
             "truncation_is_union_of_per_seed_engine_results": True,
         },
     }
@@ -149,15 +141,7 @@ def build_blast_radius_result(
     compromised_refs: Sequence[str],
     compromise_model: str,
 ) -> dict[str, Any]:
-    """Build the canonical blast-radius envelope from per-seed engine results.
-
-    This is deliberately a projection over explicit reachability results. It does
-    not traverse the authority graph, material lineage, reliance, or affectedness.
-    ``compromised_refs`` is also an integrity boundary: every reachability result
-    must identify one of those explicit seeds, and every explicit seed must have a
-    corresponding result. A caller therefore cannot smuggle authority provenance
-    into the envelope with an unrelated ``starting_subject_ref`` or nested seed.
-    """
+    """Build the canonical blast-radius envelope from per-seed engine results."""
     seeds = sorted({str(ref).strip() for ref in compromised_refs if str(ref).strip()})
     if not seeds:
         raise ValueError("compromised_refs must contain at least one subject ref")
