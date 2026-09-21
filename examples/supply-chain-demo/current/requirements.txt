@@ -1,0 +1,3 @@
+# Deterministic Testamur supply-chain demo second observation.
+# The delta is mechanical evidence only; it is not a safety or validity verdict.
+requests==2.32.5
