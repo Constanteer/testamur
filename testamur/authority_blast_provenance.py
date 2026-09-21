@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from .authority_boundaries import boundary_refs_from_crossings
+from .authority_boundaries import boundary_refs_from_crossings, trust_boundary_crossing_identity
 from .authority_projection import capability_identity
 
 
@@ -81,12 +81,9 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
         for crossing in result.get("trust_boundary_crossings") or []:
             if not isinstance(crossing, Mapping):
                 continue
-            edge_id = str(crossing.get("edge_id") or "").strip()
-            boundary_ref = str(crossing.get("boundary_ref") or "").strip()
-            path_edge_ids = tuple(str(edge).strip() for edge in crossing.get("path_edge_ids") or [] if str(edge).strip())
-            path_position = int(crossing.get("path_position") or 0)
+            key = trust_boundary_crossing_identity(crossing)
+            edge_id, boundary_ref, _, _ = key
             if edge_id and boundary_ref:
-                key = (edge_id, boundary_ref, path_edge_ids, path_position)
                 crossings[key] = _merge_record(crossings.get(key), crossing, seed_ref)
 
         for reason in result.get("truncation_reasons") or []:
@@ -96,12 +93,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
 
     crossing_values = sorted(
         crossings.values(),
-        key=lambda item: (
-            tuple(item.get("path_edge_ids") or []),
-            int(item.get("path_position") or 0),
-            str(item.get("edge_id") or ""),
-            str(item.get("boundary_ref") or ""),
-        ),
+        key=lambda item: trust_boundary_crossing_identity(item),
     )
     truncation_values = sorted(truncation_reasons)
 
