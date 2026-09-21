@@ -1,8 +1,27 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .authority import TestamurAuthorityStore
+
+
+def trust_boundary_crossing_identity(crossing: Mapping[str, Any]) -> tuple[str, str, tuple[str, ...], int]:
+    """Return the exact authority-path identity of a recorded boundary crossing.
+
+    An edge/boundary pair is deliberately insufficient identity: the same edge can
+    be reached through distinct authority paths carrying different evidence and
+    compromise provenance. Missing path evidence stays missing (the empty tuple);
+    callers must not reconstruct it from graph connectivity or material lineage.
+    """
+    edge_id = str(crossing.get("edge_id") or "").strip()
+    boundary_ref = str(crossing.get("boundary_ref") or "").strip()
+    path_edge_ids = tuple(
+        str(edge).strip()
+        for edge in crossing.get("path_edge_ids") or []
+        if str(edge).strip()
+    )
+    path_position = int(crossing.get("path_position") or 0)
+    return edge_id, boundary_ref, path_edge_ids, path_position
 
 
 def project_trust_boundary_crossings(
@@ -24,28 +43,27 @@ def project_trust_boundary_crossings(
     """
     path_edge_ids = tuple(str(raw).strip() for raw in edge_ids if str(raw).strip())
     crossings: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, int]] = set()
+    seen: set[tuple[str, str, tuple[str, ...], int]] = set()
     for position, edge_id in enumerate(path_edge_ids):
         edge = store.get_edge(edge_id)
         for raw_boundary_ref in edge.get("boundary_refs") or []:
             boundary_ref = str(raw_boundary_ref).strip()
             if not boundary_ref:
                 continue
-            identity = (edge_id, boundary_ref, position)
+            crossing = {
+                "edge_id": edge_id,
+                "boundary_ref": boundary_ref,
+                "path_position": position,
+                "path_edge_ids": list(path_edge_ids),
+                "source_ref": str(edge.get("source_ref") or ""),
+                "target_ref": str(edge.get("target_ref") or ""),
+                "relation_type": str(edge.get("relation_type") or ""),
+            }
+            identity = trust_boundary_crossing_identity(crossing)
             if identity in seen:
                 continue
             seen.add(identity)
-            crossings.append(
-                {
-                    "edge_id": edge_id,
-                    "boundary_ref": boundary_ref,
-                    "path_position": position,
-                    "path_edge_ids": list(path_edge_ids),
-                    "source_ref": str(edge.get("source_ref") or ""),
-                    "target_ref": str(edge.get("target_ref") or ""),
-                    "relation_type": str(edge.get("relation_type") or ""),
-                }
-            )
+            crossings.append(crossing)
     return crossings
 
 
@@ -60,4 +78,8 @@ def boundary_refs_from_crossings(crossings: Iterable[dict[str, Any]]) -> list[st
     )
 
 
-__all__ = ["project_trust_boundary_crossings", "boundary_refs_from_crossings"]
+__all__ = [
+    "project_trust_boundary_crossings",
+    "boundary_refs_from_crossings",
+    "trust_boundary_crossing_identity",
+]
