@@ -132,12 +132,26 @@ def build_blast_radius_result(
 
     This is deliberately a projection over explicit reachability results. It does
     not traverse the authority graph, material lineage, reliance, or affectedness.
-    In particular, ``compromised_refs`` labels the assumed seeds but does not add
-    provenance to records that were not produced by that seed's reachability run.
+    ``compromised_refs`` is also an integrity boundary: every reachability result
+    must identify one of those explicit seeds, and every explicit seed must have a
+    corresponding result. A caller therefore cannot smuggle authority provenance
+    into the envelope with an unrelated ``starting_subject_ref``.
     """
     seeds = sorted({str(ref).strip() for ref in compromised_refs if str(ref).strip()})
     if not seeds:
         raise ValueError("compromised_refs must contain at least one subject ref")
+
+    result_seeds: list[str] = []
+    for result in results:
+        seed_ref = str(result.get("starting_subject_ref") or "").strip()
+        if not seed_ref:
+            raise ValueError("reachability result missing starting_subject_ref")
+        result_seeds.append(seed_ref)
+    if len(result_seeds) != len(set(result_seeds)):
+        raise ValueError("duplicate reachability result for compromise seed")
+    if set(result_seeds) != set(seeds):
+        raise ValueError("reachability results must correspond exactly to compromised_refs")
+
     aggregated = aggregate_seeded_blast_results(results)
     helper_semantics = dict(aggregated.pop("semantics", {}))
     return {
@@ -149,6 +163,7 @@ def build_blast_radius_result(
             "blast_radius_is_potential_authority_not_observed_malicious_use": True,
             "affectedness_does_not_automatically_seed_compromise": True,
             "material_lineage_does_not_grant_authority": True,
+            "blast_results_are_bound_to_explicit_compromise_seeds": True,
             **helper_semantics,
         },
     }
