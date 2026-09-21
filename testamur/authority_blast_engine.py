@@ -33,6 +33,11 @@ def canonical_authority_blast_radius(
     because separate seed traversals happened on opposite sides of a time boundary.
     The normalized observation instant emitted by reachability is required to be
     identical for every seed and is preserved on the blast envelope for audit.
+
+    Reachability results are also bound to the normalized compromise model used
+    for this evaluation. A result produced under another compromise assumption
+    cannot be mixed into the same blast envelope, even if its seed/path happens
+    to match. This keeps model assumptions as provenance rather than presentation.
     """
     # Local import avoids making the reachability module depend on this orchestration
     # while it still exposes the legacy authority_blast_radius entry point.
@@ -63,6 +68,10 @@ def canonical_authority_blast_radius(
     if "" in observation_instants or len(observation_instants) != 1:
         raise ValueError("all reachability results must record one identical as_of instant")
 
+    result_models = {str(result.get("compromise_model") or "").strip() for result in results}
+    if result_models != {model}:
+        raise ValueError("all reachability results must record the requested compromise model")
+
     envelope = build_blast_radius_result(
         results,
         compromised_refs=seeds,
@@ -72,6 +81,7 @@ def canonical_authority_blast_radius(
     envelope["semantics"] = {
         **dict(envelope.get("semantics") or {}),
         "blast_results_share_one_observation_instant": True,
+        "blast_results_are_bound_to_one_compromise_model": True,
     }
     return envelope
 
