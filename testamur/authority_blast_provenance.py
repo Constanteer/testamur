@@ -7,18 +7,37 @@ from .authority_projection import capability_identity
 
 
 def _seed_refs(item: Mapping[str, Any], seed_ref: str) -> list[str]:
-    """Return only explicitly supplied seed provenance plus the current engine seed."""
+    """Return provenance that is valid for this exact per-seed traversal.
+
+    A per-seed reachability result is authoritative only for its own
+    ``starting_subject_ref``. Nested records therefore cannot smuggle a different
+    compromise seed into the aggregate merely by carrying a ``compromise_seed_refs``
+    field. Existing recorded provenance is accepted only when it names the current
+    traversal seed; malformed or cross-seed provenance fails closed.
+    """
+    seed = str(seed_ref).strip()
     recorded = item.get("compromise_seed_refs")
-    refs = {str(seed_ref).strip()} if str(seed_ref).strip() else set()
-    if isinstance(recorded, Sequence) and not isinstance(recorded, (str, bytes)):
-        refs.update(str(ref).strip() for ref in recorded if str(ref).strip())
-    return sorted(refs)
+    if recorded is None:
+        return [seed] if seed else []
+    if not isinstance(recorded, Sequence) or isinstance(recorded, (str, bytes)):
+        raise ValueError("compromise_seed_refs must be a sequence")
+    refs = {str(ref).strip() for ref in recorded if str(ref).strip()}
+    if not seed:
+        return sorted(refs)
+    if refs - {seed}:
+        raise ValueError("nested compromise seed provenance does not match traversal seed")
+    return [seed]
 
 
 def _merge_record(existing: dict[str, Any] | None, item: Mapping[str, Any], seed_ref: str) -> dict[str, Any]:
     merged = dict(item) if existing is None else dict(existing)
+    existing_refs = existing.get("compromise_seed_refs") if existing else []
+    if existing_refs is None:
+        existing_refs = []
+    if not isinstance(existing_refs, Sequence) or isinstance(existing_refs, (str, bytes)):
+        raise ValueError("aggregated compromise_seed_refs must be a sequence")
     merged["compromise_seed_refs"] = sorted({
-        *(_seed_refs(existing or {}, "")),
+        *(str(ref).strip() for ref in existing_refs if str(ref).strip()),
         *_seed_refs(item, seed_ref),
     })
     return merged
@@ -29,8 +48,9 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
 
     Each result must be an engine reachability result with ``starting_subject_ref``.
     Records are merged only when their canonical identity *and exact path* match.
-    Seed provenance is unioned for such duplicate records. Connectivity, common
-    targets, material lineage, reliance, and affectedness never create provenance.
+    Seed provenance is unioned only across those independently recorded per-seed
+    results. Connectivity, common targets, material lineage, reliance, and
+    affectedness never create provenance.
 
     Aggregate metadata is likewise copied only from engine-recorded reachability
     results. Trust-boundary crossings are deduplicated by exact edge/boundary pair
@@ -113,6 +133,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
         "truncation_reasons": truncation_values,
         "semantics": {
             "compromise_seed_provenance_is_engine_recorded": True,
+            "nested_seed_provenance_is_bound_to_traversal_seed": True,
             "same_target_does_not_merge_distinct_paths": True,
             "material_lineage_does_not_create_seed_provenance": True,
             "trust_boundary_crossings_are_engine_recorded_not_reconstructed": True,
@@ -135,7 +156,7 @@ def build_blast_radius_result(
     ``compromised_refs`` is also an integrity boundary: every reachability result
     must identify one of those explicit seeds, and every explicit seed must have a
     corresponding result. A caller therefore cannot smuggle authority provenance
-    into the envelope with an unrelated ``starting_subject_ref``.
+    into the envelope with an unrelated ``starting_subject_ref`` or nested seed.
     """
     seeds = sorted({str(ref).strip() for ref in compromised_refs if str(ref).strip()})
     if not seeds:
