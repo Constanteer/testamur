@@ -31,6 +31,8 @@ def canonical_authority_blast_radius(
     every seed traversal. Credential expiry, token audience/scope constraints,
     acceptance edges, and delegated permissions therefore cannot disagree merely
     because separate seed traversals happened on opposite sides of a time boundary.
+    The normalized observation instant emitted by reachability is required to be
+    identical for every seed and is preserved on the blast envelope for audit.
     """
     # Local import avoids making the reachability module depend on this orchestration
     # while it still exposes the legacy authority_blast_radius entry point.
@@ -56,11 +58,22 @@ def canonical_authority_blast_radius(
         )
         for seed_ref in seeds
     ]
-    return build_blast_radius_result(
+
+    observation_instants = {str(result.get("as_of") or "").strip() for result in results}
+    if "" in observation_instants or len(observation_instants) != 1:
+        raise ValueError("all reachability results must record one identical as_of instant")
+
+    envelope = build_blast_radius_result(
         results,
         compromised_refs=seeds,
         compromise_model=model,
     )
+    envelope["as_of"] = next(iter(observation_instants))
+    envelope["semantics"] = {
+        **dict(envelope.get("semantics") or {}),
+        "blast_results_share_one_observation_instant": True,
+    }
+    return envelope
 
 
 __all__ = ["canonical_authority_blast_radius"]
