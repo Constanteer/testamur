@@ -60,7 +60,7 @@ def test_canonical_blast_uses_one_temporal_snapshot_for_all_seeds(tmp_path, monk
         return original(*args, **kwargs)
 
     monkeypatch.setattr(reachability, "authority_reachability", recording_reachability)
-    canonical_authority_blast_radius(
+    result = canonical_authority_blast_radius(
         _store(tmp_path),
         ["principal:a", "principal:b"],
         compromise_model="FULL_SUBJECT_COMPROMISE",
@@ -70,6 +70,8 @@ def test_canonical_blast_uses_one_temporal_snapshot_for_all_seeds(tmp_path, monk
     assert observed_as_of[0] is observed_as_of[1]
     assert isinstance(observed_as_of[0], datetime)
     assert observed_as_of[0].tzinfo is not None
+    assert result["as_of"] == observed_as_of[0].isoformat().replace("+00:00", "Z")
+    assert result["semantics"]["blast_results_share_one_observation_instant"] is True
 
 
 def test_canonical_blast_preserves_explicit_as_of_for_all_seeds(tmp_path, monkeypatch):
@@ -84,7 +86,7 @@ def test_canonical_blast_preserves_explicit_as_of_for_all_seeds(tmp_path, monkey
 
     monkeypatch.setattr(reachability, "authority_reachability", recording_reachability)
     explicit = "2026-09-22T00:00:00Z"
-    canonical_authority_blast_radius(
+    result = canonical_authority_blast_radius(
         _store(tmp_path),
         ["principal:a", "principal:b"],
         compromise_model="FULL_SUBJECT_COMPROMISE",
@@ -92,6 +94,29 @@ def test_canonical_blast_preserves_explicit_as_of_for_all_seeds(tmp_path, monkey
     )
 
     assert observed_as_of == [explicit, explicit]
+    assert result["as_of"] == explicit
+
+
+def test_canonical_blast_rejects_inconsistent_engine_observation_instants(tmp_path, monkeypatch):
+    import testamur.authority_reachability_v2 as reachability
+
+    original = reachability.authority_reachability
+    calls = 0
+
+    def inconsistent_reachability(*args, **kwargs):
+        nonlocal calls
+        result = original(*args, **kwargs)
+        calls += 1
+        result["as_of"] = f"2026-09-22T00:00:0{calls}Z"
+        return result
+
+    monkeypatch.setattr(reachability, "authority_reachability", inconsistent_reachability)
+    with pytest.raises(ValueError, match="identical as_of"):
+        canonical_authority_blast_radius(
+            _store(tmp_path),
+            ["principal:a", "principal:b"],
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+        )
 
 
 def test_canonical_blast_rejects_empty_seed_set(tmp_path):
