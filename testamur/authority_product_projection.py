@@ -22,6 +22,18 @@ def _project_reason_groups(value: Any) -> dict[str, list[str]]:
     }
 
 
+def _copy_seed_provenance(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy engine-recorded compromise provenance without reconstructing it.
+
+    A product client must never infer which compromise seed reached an item from
+    path shape, subject adjacency, lineage, or a shared target.  Omission remains
+    unknown: an empty list means the canonical engine did not project provenance.
+    """
+    return {
+        "compromise_seed_refs": sorted({str(value) for value in item.get("compromise_seed_refs") or []}),
+    }
+
+
 def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     """Stable product projection for authority reachability diagnostics.
 
@@ -60,6 +72,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "evidence_state": item.get("evidence_state"),
                 "candidate_capabilities": [dict(value) for value in item.get("candidate_capabilities") or [] if isinstance(value, Mapping)],
                 "inherited_capability_budget": [dict(value) for value in item.get("inherited_capability_budget") or [] if isinstance(value, Mapping)],
+                **_copy_seed_provenance(item),
             }
         )
     projected.sort(key=lambda item: (str(item["edge_id"] or ""), str(item["target_ref"] or "")))
@@ -82,6 +95,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
             "lineage_is_not_authority": True,
             "denied_budget_is_diagnostic_not_authority": True,
             "reason_groups_are_engine_recorded_not_product_inferred": True,
+            "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
         },
     }
 
@@ -92,8 +106,8 @@ def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
     if schema not in {"testamur.authority-reachability.v1", "testamur.authority-blast-radius.v1"}:
         raise ValueError(f"unsupported authority result schema: {schema or '<missing>'}")
 
-    reachable = [dict(value) for value in result.get("reachable_subjects") or []]
-    actions = [dict(value) for value in result.get("actionable_capabilities") or []]
+    reachable = [{**dict(value), **_copy_seed_provenance(value)} for value in result.get("reachable_subjects") or []]
+    actions = [{**dict(value), **_copy_seed_provenance(value)} for value in result.get("actionable_capabilities") or []]
     diagnostics = project_authority_diagnostics(result)
     return {
         "schema_version": "testamur.authority-product-result.v1",
@@ -122,6 +136,7 @@ def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
             "lineage_is_not_authority": True,
             "affectedness_does_not_seed_compromise": True,
             "capability_constraints_are_not_collapsed": True,
+            "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
         },
     }
 
