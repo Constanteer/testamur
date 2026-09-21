@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable, Sequence
 
 from .authority import TestamurAuthorityStore
@@ -25,6 +25,12 @@ def canonical_authority_blast_radius(
     per-seed results are aggregated afterwards. Material lineage, reliance,
     affectedness, common targets, and graph connectivity therefore cannot create
     compromise-seed provenance or authority that the engine did not record.
+
+    A blast evaluation also has one temporal observation point. When callers do
+    not supply ``as_of``, snapshot UTC once here and pass that same instant to
+    every seed traversal. Credential expiry, token audience/scope constraints,
+    acceptance edges, and delegated permissions therefore cannot disagree merely
+    because separate seed traversals happened on opposite sides of a time boundary.
     """
     # Local import avoids making the reachability module depend on this orchestration
     # while it still exposes the legacy authority_blast_radius entry point.
@@ -36,6 +42,7 @@ def canonical_authority_blast_radius(
         raise ValueError("compromised_refs must contain at least one subject ref")
 
     model = _normalize_model(compromise_model)
+    evaluation_as_of: str | datetime = as_of if as_of is not None else datetime.now(timezone.utc)
     results = [
         authority_reachability(
             store,
@@ -45,7 +52,7 @@ def canonical_authority_blast_radius(
             max_depth=max_depth,
             max_paths=max_paths,
             expansion_budget=expansion_budget,
-            as_of=as_of,
+            as_of=evaluation_as_of,
         )
         for seed_ref in seeds
     ]
