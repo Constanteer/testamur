@@ -15,13 +15,13 @@
     const path = location.pathname;
     const query = new URLSearchParams(location.search);
     if (/^\/projects\/[^/]+\/?$/.test(path) && query.get('tab') === 'supply-chain') {
-      return ['/learn#compare', 'Read Compare → Impact', 'Interpret scan changes without turning them into verdicts'];
+      return ['/learn', 'Read Compare → Impact', 'Interpret scan changes without turning them into verdicts'];
     }
     if (/^\/sources\/[^/]+\/?$/.test(path)) {
-      return ['/learn#revision', 'Read Source → Revision', 'Separate source identity from recorded observations'];
+      return ['/learn', 'Read Source → Revision', 'Separate source identity from recorded observations'];
     }
     if (/^\/revisions\/[^/]+\/?$/.test(path)) {
-      return ['/learn#impact', 'Read Revision → Impact', 'Trace consequences before recording revalidation'];
+      return ['/learn', 'Read Revision → Impact', 'Trace consequences before recording revalidation'];
     }
     if (path === '/integrations') {
       return ['/quickstart', 'Run the 5-minute quickstart', 'Use Codex / MCP inside the same evidence model'];
@@ -54,5 +54,4 @@
 
   addEventListener('DOMContentLoaded', render);
   addEventListener('popstate', render);
-  addEventListener('testamur:navigation', render);
 })();
