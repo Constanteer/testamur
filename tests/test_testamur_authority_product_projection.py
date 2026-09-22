@@ -7,6 +7,12 @@ from testamur.authority_product_projection import (
 
 
 def test_projection_preserves_exact_blocking_evidence_without_inference():
+    blocked_crossing = {
+        "edge_id": "edge:auth",
+        "boundary_ref": "boundary:corp",
+        "path_position": 1,
+        "path_edge_ids": ["edge:read", "edge:auth"],
+    }
     projected = project_authority_diagnostics(
         {
             "blocked_transitions": [
@@ -21,17 +27,13 @@ def test_projection_preserves_exact_blocking_evidence_without_inference():
                     "unresolved_constraints": ["device_binding"],
                     "path_edge_ids": ["edge:read", "edge:auth"],
                     "supporting_edge_ids": ["edge:accepts"],
+                    "boundary_refs": ["boundary:corp"],
+                    "trust_boundary_crossings": [blocked_crossing],
                     "evidence_state": "CORROBORATED",
                 }
             ],
             "trust_boundary_refs": ["boundary:corp"],
-            "trust_boundary_crossings": [
-                {
-                    "edge_id": "edge:auth",
-                    "boundary_ref": "boundary:corp",
-                    "path_position": 2,
-                }
-            ],
+            "trust_boundary_crossings": [blocked_crossing],
         }
     )
     item = projected["blocked_transitions"][0]
@@ -40,10 +42,42 @@ def test_projection_preserves_exact_blocking_evidence_without_inference():
     assert item["unresolved_constraints"] == ["device_binding"]
     assert item["path_edge_ids"] == ["edge:read", "edge:auth"]
     assert item["supporting_edge_ids"] == ["edge:accepts"]
+    assert item["boundary_refs"] == ["boundary:corp"]
+    assert item["trust_boundary_crossings"][0]["path_edge_ids"] == ["edge:read", "edge:auth"]
     assert projected["blocked_reason_counts"] == {"audience_outside_delegation": 1}
     assert projected["failed_constraint_counts"] == {"audience": 1}
     assert projected["unresolved_constraint_counts"] == {"device_binding": 1}
     assert projected["trust_boundary_crossings"][0]["edge_id"] == "edge:auth"
+    assert projected["semantics"]["blocked_boundary_evidence_is_engine_recorded_not_product_inferred"] is True
+
+
+def test_projection_does_not_infer_blocked_boundary_from_global_crossings():
+    projected = project_authority_diagnostics(
+        {
+            "blocked_transitions": [
+                {
+                    "edge_id": "edge:blocked",
+                    "source_ref": "principal:alice",
+                    "target_ref": "service:github",
+                    "relation_type": "CAN_CONNECT",
+                    "path_edge_ids": ["edge:blocked"],
+                    "reasons": ["network_zone_mismatch"],
+                }
+            ],
+            "trust_boundary_refs": ["boundary:unrelated"],
+            "trust_boundary_crossings": [
+                {
+                    "edge_id": "edge:other",
+                    "boundary_ref": "boundary:unrelated",
+                    "path_position": 0,
+                    "path_edge_ids": ["edge:other"],
+                }
+            ],
+        }
+    )
+    blocked = projected["blocked_transitions"][0]
+    assert blocked["boundary_refs"] == []
+    assert blocked["trust_boundary_crossings"] == []
 
 
 def test_projection_does_not_promote_blocked_transition_to_capability():
