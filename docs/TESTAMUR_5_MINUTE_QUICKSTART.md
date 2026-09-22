@@ -79,14 +79,17 @@ This sequence is the Web product’s intended mental model too. “Impact” mea
 Testamur’s MCP/agent surface exposes the same project evidence model. For an existing project, the useful read path includes:
 
 ```text
+testamur.project_repository_binding
+testamur.set_project_repository_binding_enabled
+testamur.project_repository_unbind
 testamur.project_supply_chain
 testamur.project_scan
 testamur.project_supply_chain_diff
-testamur.project_advisories
 testamur.project_advisory_revalidation
+testamur.record_project_advisory_assessment
 ```
 
-For an advisory candidate, use `testamur.project_advisory_revalidation` to read the canonical review projection. After doing the actual review, `testamur.record_project_advisory_assessment` records evidence, basis, analyzer provenance, and optional supersession. The caller must not manufacture a canonical `verdict`, `state`, or `trust_score`; reload the project projection after the write to see the canonical result.
+Before scanning, `testamur.project_repository_binding` exposes the durable binding and its scanner-eligibility state; enable/disable or unbind changes scanner eligibility without rewriting binding history. For an advisory candidate, use `testamur.project_advisory_revalidation` to read the canonical review projection. After doing the actual review, `testamur.record_project_advisory_assessment` records evidence, basis, analyzer provenance, and optional supersession. The caller must not manufacture a canonical `verdict`, `state`, or `trust_score`; reload the project projection after the write to see the canonical result.
 
 A model fetching or seeing evidence is exposure, not durable reliance. Host integrations must keep `EXPOSED_TO_MODEL != RELIED`; reliance requires the explicit reconciliation path defined by the Testamur agent protocol.
 
