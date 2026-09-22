@@ -43,6 +43,7 @@ def test_same_boundary_edge_on_distinct_authority_paths_is_not_merged() -> None:
         ("principal:b",),
     }
     assert aggregated["semantics"]["trust_boundary_crossings_preserve_exact_path_identity"] is True
+    assert aggregated["semantics"]["trust_boundary_crossings_use_canonical_aggregation"] is True
 
 
 def test_identical_crossing_path_unions_only_recorded_seed_provenance() -> None:
