@@ -28,3 +28,9 @@ def test_contextual_guide_preserves_semantic_boundaries():
     assert 'confidence score' not in lowered
     assert 'infer verification' in lowered
     assert 'explicit recorded reliance' in lowered
+
+
+def test_contextual_guide_ignores_its_own_dom_mutations():
+    assert 'function onlyGuideMutations(records)' in GUIDE
+    assert 'if (onlyGuideMutations(records)) return;' in GUIDE
+    assert 'queueMicrotask(render);' in GUIDE
