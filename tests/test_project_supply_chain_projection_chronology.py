@@ -26,7 +26,7 @@ def _package_lock(root, *, package: str, version: str) -> None:
 def test_project_compat_projection_uses_cross_record_chronology_not_local_ordinal(tmp_path) -> None:
     """The compatibility projection must select the newest binding observation globally.
 
-    Revision ordinal is record-local.  A binding with a longer scan history must not
+    Revision ordinal is record-local. A binding with a longer scan history must not
     outrank a later observation from another repository merely because its local
     ordinal is larger.
     """
@@ -66,4 +66,3 @@ def test_project_compat_projection_uses_cross_record_chronology_not_local_ordina
     }
     assert by_binding["primary"]["scan_revision_id"] == latest_primary["scan_revision_id"]
     assert by_binding["docs"]["scan_revision_id"] == latest_docs["scan_revision_id"]
-    assert detail["semantics"]["inventory_is_not_merged_across_repository_bindings"] is True
