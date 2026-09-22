@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import pytest
+
 import testamur
 import testamur.authority_reachability_engine as engine
 
 
 def test_package_reachability_uses_canonical_projection() -> None:
     assert testamur.authority_reachability is engine.canonical_authority_reachability
+
+
+def _base_result() -> dict:
+    return {
+        "schema_version": "testamur.authority-reachability.v1",
+        "starting_subject_ref": "principal:a",
+        "compromise_model": "FULL_SUBJECT_COMPROMISE",
+        "as_of": "2026-09-22T00:00:00Z",
+        "reachable_subjects": [],
+        "actionable_capabilities": [],
+        "trust_boundary_crossings": [],
+        "trust_boundary_refs": [],
+        "semantics": {},
+    }
 
 
 def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatch) -> None:
@@ -23,20 +39,14 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     }
 
     def fake_reachability(*args, **kwargs):
-        return {
-            "schema_version": "testamur.authority-reachability.v1",
-            "starting_subject_ref": "principal:a",
-            "compromise_model": "FULL_SUBJECT_COMPROMISE",
-            "as_of": "2026-09-22T00:00:00Z",
-            "reachable_subjects": [
-                {"subject_ref": "resource:x", "trust_boundary_crossings": [crossing_a]},
-                {"subject_ref": "resource:y", "trust_boundary_crossings": [crossing_b]},
-            ],
-            "actionable_capabilities": [],
-            "trust_boundary_crossings": [crossing_b],
-            "trust_boundary_refs": ["boundary:provider"],
-            "semantics": {},
-        }
+        result = _base_result()
+        result["reachable_subjects"] = [
+            {"subject_ref": "resource:x", "trust_boundary_crossings": [crossing_a]},
+            {"subject_ref": "resource:y", "trust_boundary_crossings": [crossing_b]},
+        ]
+        result["trust_boundary_crossings"] = [crossing_b]
+        result["trust_boundary_refs"] = ["boundary:provider"]
+        return result
 
     monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
     result = engine.canonical_authority_reachability(
@@ -50,21 +60,19 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     assert result["semantics"]["trust_boundary_crossings_preserve_exact_path_identity"] is True
     assert result["semantics"]["trust_boundary_crossings_use_canonical_aggregation"] is True
     assert result["semantics"]["trust_boundary_crossings_are_recorded_not_connectivity_inferred"] is True
+    assert result["semantics"]["reachability_result_is_bound_to_requested_seed"] is True
+    assert result["semantics"]["reachability_result_is_bound_to_requested_compromise_model"] is True
+    assert result["semantics"]["reachability_result_requires_canonical_schema"] is True
+    assert result["semantics"]["reachability_result_records_observation_instant"] is True
 
 
 def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
     def fake_reachability(*args, **kwargs):
-        return {
-            "schema_version": "testamur.authority-reachability.v1",
-            "starting_subject_ref": "principal:a",
-            "compromise_model": "FULL_SUBJECT_COMPROMISE",
-            "as_of": "2026-09-22T00:00:00Z",
-            "reachable_subjects": [{"subject_ref": "resource:x"}],
-            "actionable_capabilities": [],
-            "trust_boundary_crossings": [{"edge_id": "invented", "boundary_ref": "invented"}],
-            "trust_boundary_refs": ["invented"],
-            "semantics": {},
-        }
+        result = _base_result()
+        result["reachable_subjects"] = [{"subject_ref": "resource:x"}]
+        result["trust_boundary_crossings"] = [{"edge_id": "invented", "boundary_ref": "invented"}]
+        result["trust_boundary_refs"] = ["invented"]
+        return result
 
     monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
     result = engine.canonical_authority_reachability(
@@ -73,3 +81,27 @@ def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
 
     assert result["trust_boundary_crossings"] == []
     assert result["trust_boundary_refs"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value", "message"),
+    [
+        ("schema_version", "testamur.authority-blast-radius.v1", "unsupported schema"),
+        ("starting_subject_ref", "principal:b", "starting subject"),
+        ("compromise_model", "READ_ONLY_COMPROMISE", "compromise model"),
+        ("as_of", "", "observation instant"),
+    ],
+)
+def test_canonical_projection_fails_closed_on_envelope_provenance_mismatch(
+    monkeypatch, field, bad_value, message
+) -> None:
+    def fake_reachability(*args, **kwargs):
+        result = _base_result()
+        result[field] = bad_value
+        return result
+
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
+    with pytest.raises(ValueError, match=message):
+        engine.canonical_authority_reachability(
+            object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE"
+        )
