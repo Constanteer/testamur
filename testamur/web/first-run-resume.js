@@ -9,9 +9,9 @@
     ['project', 'Create a project', '/', 'Define the workspace boundary'],
     ['monitor', 'Add a monitor', '/', 'Choose what Testamur records'],
     ['baseline', 'Record a baseline', '/', 'Create the first observation'],
-    ['compare', 'Open Compare', '/compare', 'Inspect change without calling it invalid'],
-    ['impact', 'Review Impact', '/impact', 'Inspect consequences without guessing reliance'],
-    ['revalidation', 'Revalidation', '/revalidation', 'Decide what evidence must run again'],
+    ['compare', 'Open Compare', '/demo?stage=compare', 'Inspect change without calling it invalid'],
+    ['impact', 'Review Impact', '/demo?stage=impact', 'Inspect consequences without guessing reliance'],
+    ['revalidation', 'Revalidation', '/demo?stage=revalidate', 'Decide what evidence must run again'],
   ];
 
   function readProgress() {
@@ -37,16 +37,19 @@
 
   function markVisited(progress) {
     const path = location.pathname;
-    if (path.startsWith('/compare')) progress.compare = true;
-    if (path.startsWith('/impact')) progress.impact = true;
-    if (path.startsWith('/revalidation')) progress.revalidation = true;
+    const stage = new URLSearchParams(location.search).get('stage');
+    // Real object tabs and the read-only example both count as presentation
+    // progress. Visiting them does not assert that any object was revalidated.
+    if ((path.startsWith('/object/') && stage === 'compare') || (path === '/demo' && stage === 'compare')) progress.compare = true;
+    if (path.startsWith('/impact/') || (path.startsWith('/object/') && stage === 'impact') || (path === '/demo' && stage === 'impact')) progress.impact = true;
+    if ((path.startsWith('/object/') && stage === 'revalidate') || (path === '/demo' && stage === 'revalidate')) progress.revalidation = true;
     writeProgress(progress);
     return progress;
   }
 
   function render() {
     document.querySelector('[data-first-run-resume]')?.remove();
-    if (location.pathname === '/login' || location.pathname === '/signup') return;
+    if (location.pathname === '/signin' || location.pathname === '/signup') return;
 
     const progress = markVisited(syncRecordedState(readProgress()));
     const completed = steps.filter(([key]) => progress[key]).length;
