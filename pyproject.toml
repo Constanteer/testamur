@@ -21,7 +21,7 @@ classifiers = [
 testamur = "testamur.front_router:main"
 testamur-web = "testamur.web_app:main"
 testamur-gateway = "testamur.source_gateway_cli:main"
-testamur-gateway-mcp = "testamur.source_gateway_project_mcp:main"
+testamur-gateway-mcp = "testamur.repository_binding_mcp:main"
 testamur-codex-hook = "testamur.codex_gateway_hook:main"
 testamur-project-repo = "testamur.repository_binding_cli:main"
 
