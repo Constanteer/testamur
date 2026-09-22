@@ -15,11 +15,16 @@ _REACHABILITY_SCHEMA_VERSION = "testamur.authority-reachability.v1"
 def _normalize_observation_instant(value: str | datetime) -> str:
     """Normalize an explicit observation instant for provenance comparison.
 
-    This helper is deliberately temporal only. It never derives credential
-    validity, authority, or permission from graph connectivity.
+    Observation instants are provenance, not convenience input: a timestamp
+    without an explicit UTC offset is ambiguous and therefore rejected rather
+    than silently interpreted as UTC. This helper is deliberately temporal
+    only. It never derives credential validity, authority, or permission from
+    graph connectivity.
     """
     if isinstance(value, datetime):
-        parsed = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        parsed = value
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("as_of must include an explicit timezone offset")
     else:
         text = str(value or "").strip()
         if not text:
@@ -27,8 +32,8 @@ def _normalize_observation_instant(value: str | datetime) -> str:
         if text.endswith("Z"):
             text = text[:-1] + "+00:00"
         parsed = datetime.fromisoformat(text)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("as_of must include an explicit timezone offset")
     return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
@@ -99,6 +104,7 @@ def canonical_authority_reachability(
         "reachability_result_requires_canonical_schema": True,
         "reachability_result_records_observation_instant": True,
         "explicit_observation_instant_is_exactly_bound": True,
+        "observation_instant_requires_explicit_timezone": True,
         "trust_boundary_crossings_preserve_exact_path_identity": True,
         "trust_boundary_crossings_use_canonical_aggregation": True,
         "trust_boundary_crossings_are_recorded_not_connectivity_inferred": True,
