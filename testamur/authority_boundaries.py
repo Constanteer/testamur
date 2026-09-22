@@ -24,6 +24,47 @@ def trust_boundary_crossing_identity(crossing: Mapping[str, Any]) -> tuple[str, 
     return edge_id, boundary_ref, path_edge_ids, path_position
 
 
+def aggregate_trust_boundary_crossings(
+    crossings: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Deduplicate recorded crossings without weakening exact-path evidence.
+
+    This helper intentionally knows nothing about graph connectivity, material
+    lineage, reliance, or affectedness. Two crossings merge only when their
+    recorded authority-path identities are exactly equal. It also does not invent
+    compromise provenance: if otherwise-identical records carry seed provenance,
+    only the explicitly recorded seed refs are unioned.
+    """
+    aggregated: dict[tuple[str, str, tuple[str, ...], int], dict[str, Any]] = {}
+    for raw in crossings:
+        item = dict(raw)
+        identity = trust_boundary_crossing_identity(item)
+        current = aggregated.get(identity)
+        if current is None:
+            if "compromise_seed_refs" in item:
+                seeds = item.get("compromise_seed_refs")
+                if isinstance(seeds, (str, bytes)) or not isinstance(seeds, Iterable):
+                    raise ValueError("compromise_seed_refs must be a sequence")
+                item["compromise_seed_refs"] = sorted(
+                    {str(seed).strip() for seed in seeds if str(seed).strip()}
+                )
+            aggregated[identity] = item
+            continue
+
+        if "compromise_seed_refs" in current or "compromise_seed_refs" in item:
+            raw_seeds = item.get("compromise_seed_refs") or []
+            if isinstance(raw_seeds, (str, bytes)) or not isinstance(raw_seeds, Iterable):
+                raise ValueError("compromise_seed_refs must be a sequence")
+            current["compromise_seed_refs"] = sorted(
+                {
+                    *(str(seed).strip() for seed in current.get("compromise_seed_refs") or [] if str(seed).strip()),
+                    *(str(seed).strip() for seed in raw_seeds if str(seed).strip()),
+                }
+            )
+
+    return [aggregated[key] for key in sorted(aggregated)]
+
+
 def project_trust_boundary_crossings(
     store: TestamurAuthorityStore,
     edge_ids: Iterable[str],
@@ -82,4 +123,5 @@ __all__ = [
     "project_trust_boundary_crossings",
     "boundary_refs_from_crossings",
     "trust_boundary_crossing_identity",
+    "aggregate_trust_boundary_crossings",
 ]
