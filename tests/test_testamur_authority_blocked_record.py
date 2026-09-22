@@ -63,3 +63,22 @@ def test_blocked_record_allows_no_boundary_without_inference():
 
     assert item["boundary_refs"] == []
     assert item["trust_boundary_crossings"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("path_edge_ids", ["edge:1", 2]),
+        ("supporting_edge_ids", [object()]),
+        ("boundary_refs", [7]),
+        ("path_edge_ids", "edge:1"),
+    ],
+)
+def test_blocked_record_rejects_non_string_or_scalar_provenance(field, value):
+    with pytest.raises(ValueError, match="exact string refs"):
+        _record(**{field: value})
+
+
+def test_blocked_record_rejects_non_mapping_crossing_without_coercion():
+    with pytest.raises(ValueError, match="mapping records"):
+        _record(trust_boundary_crossings=["boundary:prod"])
