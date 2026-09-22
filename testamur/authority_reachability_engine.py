@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .authority import TestamurAuthorityStore
 from .authority_boundaries import aggregate_trust_boundary_crossings, boundary_refs_from_crossings
@@ -35,6 +35,33 @@ def _normalize_observation_instant(value: str | datetime) -> str:
         if parsed.tzinfo is None or parsed.utcoffset() is None:
             raise ValueError("as_of must include an explicit timezone offset")
     return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _recorded_crossings(record: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return crossings whose exact-path provenance is internally consistent.
+
+    A crossing is evidence about one recorded authority path.  It is invalid if
+    it names another path, points outside that path, or names a different edge
+    at its recorded position.  We deliberately reject rather than reconstruct:
+    graph adjacency, material lineage, reliance, and affectedness are not
+    authority evidence and cannot repair malformed crossing provenance.
+    """
+    path = [str(edge_id) for edge_id in (record.get("path_edge_ids") or [])]
+    crossings: list[dict[str, Any]] = []
+    for raw in record.get("trust_boundary_crossings") or []:
+        if not isinstance(raw, Mapping):
+            raise ValueError("authority crossing must be a mapping")
+        crossing = dict(raw)
+        crossing_path = [str(edge_id) for edge_id in (crossing.get("path_edge_ids") or [])]
+        if crossing_path != path:
+            raise ValueError("authority crossing exact path does not match its containing record")
+        position = crossing.get("path_position")
+        if isinstance(position, bool) or not isinstance(position, int) or position < 0 or position >= len(path):
+            raise ValueError("authority crossing path position is outside its recorded exact path")
+        if str(crossing.get("edge_id") or "") != path[position]:
+            raise ValueError("authority crossing edge does not match its recorded exact path position")
+        crossings.append(crossing)
+    return crossings
 
 
 def canonical_authority_reachability(
@@ -91,8 +118,9 @@ def canonical_authority_reachability(
     recorded_crossings: list[dict[str, Any]] = []
     for collection_name in ("reachable_subjects", "actionable_capabilities"):
         for record in result.get(collection_name) or []:
-            for crossing in record.get("trust_boundary_crossings") or []:
-                recorded_crossings.append(dict(crossing))
+            if not isinstance(record, Mapping):
+                raise ValueError(f"authority {collection_name} record must be a mapping")
+            recorded_crossings.extend(_recorded_crossings(record))
 
     crossings = aggregate_trust_boundary_crossings(recorded_crossings)
     result["trust_boundary_crossings"] = crossings
@@ -108,6 +136,7 @@ def canonical_authority_reachability(
         "trust_boundary_crossings_preserve_exact_path_identity": True,
         "trust_boundary_crossings_use_canonical_aggregation": True,
         "trust_boundary_crossings_are_recorded_not_connectivity_inferred": True,
+        "trust_boundary_crossings_are_bound_to_containing_exact_path": True,
     }
     return result
 
