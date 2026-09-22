@@ -13,6 +13,33 @@ def test_set_valued_authority_evidence_never_stringifies_objects():
         assert not capability_allowed(cap(**{key: []}), None)
 
 
+def test_conflicting_aliases_are_ambiguous_evidence_not_a_union():
+    for left, right in (
+        ("scope", "scopes"),
+        ("audience", "required_audience"),
+        ("service_ref", "service_refs"),
+        ("tenant", "tenant_id"),
+        ("repository_ref", "repository_refs"),
+    ):
+        assert not capability_allowed(cap(**{left: "a", right: "b"}), None)
+
+
+def test_equivalent_aliases_are_only_alternate_encodings():
+    assert capability_allowed(cap(scope="contents:write", scopes=["contents:write"]), None)
+    assert capability_allowed(cap(audience=["github-app"], required_audience="github-app"), None)
+    assert capability_allowed(
+        cap(repository_selection="selected", repository_ref="repo:a", repository_refs=["repo:a"]), None
+    )
+
+
+def test_conflicting_aliases_cannot_create_delegated_connector_budget():
+    edge = {
+        "relation_type": "DELEGATES",
+        "capabilities": [cap(scope="contents:write", scopes=["metadata:read"])],
+    }
+    assert delegation_budget(edge, None) == ()
+
+
 def test_malformed_parent_or_child_evidence_cannot_participate_in_attenuation():
     parent = cap(scopes=["contents:write"], audience=["github-app"], service_ref=["svc:github"])
     assert not capability_is_attenuation(cap(scope={"name": "contents:write"}, audience="github-app", service_ref="svc:github"), parent)
