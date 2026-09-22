@@ -22,6 +22,7 @@ def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _parse_time(value: Any) -> datetime | None:
+    """Parse an explicitly zoned capability-validity timestamp."""
     if value is None:
         return None
     text = str(value).strip()
@@ -33,8 +34,8 @@ def _parse_time(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(text)
     except (TypeError, ValueError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
     return parsed.astimezone(timezone.utc)
 
 
@@ -60,6 +61,9 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
         return False
     constraints = _constraints(capability)
 
+    # Expiry participates in delegation attenuation. Ambiguous wall-clock text is
+    # not authority evidence and therefore makes the capability malformed rather
+    # than being silently interpreted as UTC.
     if "expires_at" in constraints and _parse_time(constraints.get("expires_at")) is None:
         return False
 
