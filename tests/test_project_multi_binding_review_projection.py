@@ -153,3 +153,61 @@ def test_latest_projection_per_binding_replaces_older_scan_without_hiding_other_
     assert by_binding["primary"]["scan_revision_id"] == second_primary["scan_revision_id"]
     assert by_binding["primary"]["scan_revision_id"] != first_primary["scan_revision_id"]
     assert by_binding["docs"]["scan_revision_id"] == docs_scan["scan_revision_id"]
+
+
+def test_per_binding_projection_is_not_capped_by_other_binding_activity(tmp_path) -> None:
+    primary_root = tmp_path / "primary"
+    docs_root = tmp_path / "docs"
+    primary_root.mkdir()
+    docs_root.mkdir()
+    _package_lock(primary_root, package="alpha", version="1.0.0", integrity="sha512-alpha")
+    _package_lock(docs_root, package="beta", version="2.0.0", integrity="sha512-beta")
+
+    service = TestamurProductService(tmp_path / "state" / "evidence.db")
+    project = service.projects.create_project(name="uncapped-binding-projection")
+    service.projects.bind_repository(
+        project["project_id"], locator=str(primary_root), binding_key="primary"
+    )
+    service.projects.bind_repository(
+        project["project_id"], locator=str(docs_root), binding_key="docs"
+    )
+
+    docs_scan = scan_bound_project_supply_chain(
+        service, project["project_id"], binding_key="docs"
+    )
+    primary_scan = scan_bound_project_supply_chain(
+        service, project["project_id"], binding_key="primary"
+    )
+
+    # Create more than the bounded relation/history read window using canonical
+    # immutable record APIs. This models a very active primary binding without
+    # spending the test on repeated filesystem parsing.
+    record_id = primary_scan["scan_record_id"]
+    latest = service.records.latest_revision(record_id)
+    assert latest is not None
+    for index in range(501):
+        next_revision = service.records.append_revision(
+            record_id,
+            expected_parent_revision_id=latest["revision_id"],
+            statement=latest["statement"],
+            basis=latest["basis"],
+            title=latest.get("title"),
+            created_by="test:binding-projection-window",
+        )
+        service.records.create_relation(
+            "cites",
+            from_ref=project["project_id"],
+            to_ref=next_revision["revision_id"],
+            basis=[{"kind": "fixture_scan", "ref": next_revision["revision_id"]}],
+            created_by="test:binding-projection-window",
+        )
+        latest = next_revision
+
+    detail = service.project(project["project_id"])
+    by_binding = {
+        item["repository_binding"]["binding_key"]: item
+        for item in detail["supply_chains"]
+    }
+    assert set(by_binding) == {"primary", "docs"}
+    assert by_binding["docs"]["scan_revision_id"] == docs_scan["scan_revision_id"]
+    assert by_binding["primary"]["scan_revision_id"] == latest["revision_id"]
