@@ -37,12 +37,14 @@
 
   function markVisited(progress) {
     const path = location.pathname;
-    const stage = new URLSearchParams(location.search).get('stage');
+    const query = new URLSearchParams(location.search);
+    const demoStage = query.get('stage');
+    const objectTab = query.get('tab');
     // Real object tabs and the read-only example both count as presentation
     // progress. Visiting them does not assert that any object was revalidated.
-    if ((path.startsWith('/object/') && stage === 'compare') || (path === '/demo' && stage === 'compare')) progress.compare = true;
-    if (path.startsWith('/impact/') || (path.startsWith('/object/') && stage === 'impact') || (path === '/demo' && stage === 'impact')) progress.impact = true;
-    if ((path.startsWith('/object/') && stage === 'revalidate') || (path === '/demo' && stage === 'revalidate')) progress.revalidation = true;
+    if ((path.startsWith('/object/') && objectTab === 'compare') || (path === '/demo' && demoStage === 'compare')) progress.compare = true;
+    if (path.startsWith('/impact/') || (path.startsWith('/object/') && objectTab === 'impact') || (path === '/demo' && demoStage === 'impact')) progress.impact = true;
+    if ((path.startsWith('/object/') && objectTab === 'revalidate') || (path === '/demo' && demoStage === 'revalidate')) progress.revalidation = true;
     writeProgress(progress);
     return progress;
   }
