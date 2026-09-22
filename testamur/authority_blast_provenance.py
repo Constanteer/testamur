@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from .authority_boundaries import boundary_refs_from_crossings, trust_boundary_crossing_identity
+from .authority_boundaries import aggregate_trust_boundary_crossings, boundary_refs_from_crossings
 from .authority_projection import capability_identity
 
 
@@ -40,16 +40,17 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
     """Aggregate per-seed reachability without inventing cross-seed authority.
 
     Records are merged only when their canonical identity and exact authority path
-    match. Trust-boundary crossings follow the same rule: the edge/boundary pair
-    alone is not sufficient identity because the same crossing can be reached via
-    distinct authority paths with different evidence and compromise provenance.
+    match. Trust-boundary crossings are first bound to their actual traversal seed,
+    then passed through the shared canonical boundary aggregator. This keeps
+    reachability, blast, ProductService, and Web consumers on one exact crossing
+    identity instead of maintaining subtly different edge/boundary dedup rules.
     Connectivity, material lineage, reliance, and affectedness never create either
     authority or crossing provenance.
     """
     subjects: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
     actions: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
     blocked: dict[tuple[str, str, str, tuple[str, ...]], dict[str, Any]] = {}
-    crossings: dict[tuple[str, str, tuple[str, ...], int], dict[str, Any]] = {}
+    seeded_crossings: list[dict[str, Any]] = []
     truncation_reasons: set[str] = set()
 
     for result in results:
@@ -81,20 +82,17 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
         for crossing in result.get("trust_boundary_crossings") or []:
             if not isinstance(crossing, Mapping):
                 continue
-            key = trust_boundary_crossing_identity(crossing)
-            edge_id, boundary_ref, _, _ = key
+            edge_id = str(crossing.get("edge_id") or "").strip()
+            boundary_ref = str(crossing.get("boundary_ref") or "").strip()
             if edge_id and boundary_ref:
-                crossings[key] = _merge_record(crossings.get(key), crossing, seed_ref)
+                seeded_crossings.append(_merge_record(None, crossing, seed_ref))
 
         for reason in result.get("truncation_reasons") or []:
             text = str(reason).strip()
             if text:
                 truncation_reasons.add(text)
 
-    crossing_values = sorted(
-        crossings.values(),
-        key=lambda item: trust_boundary_crossing_identity(item),
-    )
+    crossing_values = aggregate_trust_boundary_crossings(seeded_crossings)
     truncation_values = sorted(truncation_reasons)
 
     return {
@@ -122,6 +120,7 @@ def aggregate_seeded_blast_results(results: Sequence[Mapping[str, Any]]) -> dict
             "trust_boundary_crossings_are_engine_recorded_not_reconstructed": True,
             "trust_boundary_crossing_seed_provenance_is_engine_recorded": True,
             "trust_boundary_crossings_preserve_exact_path_identity": True,
+            "trust_boundary_crossings_use_canonical_aggregation": True,
             "truncation_is_union_of_per_seed_engine_results": True,
         },
     }
