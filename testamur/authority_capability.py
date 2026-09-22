@@ -53,6 +53,25 @@ def _set_value_is_well_formed(value: Any) -> bool:
     return False
 
 
+def _set(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value} if value else set()
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        return {item for item in value if isinstance(item, str) and item}
+    return set()
+
+
+def _aliases_are_consistent(constraints: Mapping[str, Any], aliases: Sequence[str]) -> bool:
+    """Aliases are alternate encodings of one observation, not independent grants.
+
+    If more than one alias is recorded they must describe the exact same set.  Unioning
+    conflicting scope/audience/service evidence would manufacture authority that no
+    individual observation actually asserted.
+    """
+    observed = [_set(constraints[key]) for key in aliases if key in constraints]
+    return len(observed) < 2 or all(values == observed[0] for values in observed[1:])
+
+
 def _well_formed(capability: Mapping[str, Any]) -> bool:
     namespace = capability.get("namespace")
     action = capability.get("action")
@@ -71,33 +90,28 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
     for key in ("approval_required", "human_confirmation_required", "mfa_required"):
         if key in constraints and not isinstance(constraints[key], bool):
             return False
-    # Audience/scope/service/tenant/binding evidence is security-sensitive. Reject
-    # mappings, numbers, empty lists, mixed lists, etc.; never coerce them with str().
     for aliases in _SET_CONSTRAINT_ALIASES:
         for key in aliases:
             if key in constraints and not _set_value_is_well_formed(constraints[key]):
                 return False
-    for key in ("repository_ref", "repository_refs"):
+        if not _aliases_are_consistent(constraints, aliases):
+            return False
+    repository_aliases = ("repository_ref", "repository_refs")
+    for key in repository_aliases:
         if key in constraints and not _set_value_is_well_formed(constraints[key]):
             return False
+    if not _aliases_are_consistent(constraints, repository_aliases):
+        return False
     selection = constraints.get("repository_selection")
     if selection is not None:
         if selection not in {"all", "selected", "unresolved"}:
             return False
-        refs = _constraint_set(constraints, "repository_ref", "repository_refs")
+        refs = _constraint_set(constraints, *repository_aliases)
         if selection == "selected" and not refs:
             return False
         if selection in {"all", "unresolved"} and refs:
             return False
     return True
-
-
-def _set(value: Any) -> set[str]:
-    if isinstance(value, str):
-        return {value} if value else set()
-    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
-        return {item for item in value if isinstance(item, str) and item}
-    return set()
 
 
 def _constraint_set(constraints: Mapping[str, Any], *aliases: str) -> set[str]:
