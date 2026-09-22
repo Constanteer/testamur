@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .authority import AuthorityRelationType, TestamurAuthorityStore
+from .authority_boundaries import boundary_refs_from_crossings, project_trust_boundary_crossings
 from .authority_reachability_policy import capability_rejection_diagnostics, downstream_budget
 from .authority_reachability_v2 import (
     AuthorityReachabilityClass,
@@ -97,18 +98,36 @@ def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list
     return budget
 
 
+def _blocked_boundary_evidence(
+    store: TestamurAuthorityStore, path_edge_ids: list[str]
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Project boundary evidence from the exact rejected authority path only.
+
+    This is explanatory evidence for an attempted transition, not a permission
+    inference. In particular, no graph search, material-lineage walk, reliance edge,
+    or affectedness relation is consulted to invent an alternate authority path.
+    """
+    if not path_edge_ids:
+        return [], []
+    crossings = project_trust_boundary_crossings(store, path_edge_ids)
+    return boundary_refs_from_crossings(crossings), crossings
+
+
 def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) -> dict[str, Any]:
     enriched = dict(result)
     blocked: list[dict[str, Any]] = []
     for raw in result.get("blocked_transitions") or []:
         item = dict(raw)
+        path = [str(value) for value in item.get("path_edge_ids") or [] if str(value)]
+        boundary_refs, crossings = _blocked_boundary_evidence(store, path)
+        item["boundary_refs"] = boundary_refs
+        item["trust_boundary_crossings"] = crossings
         reasons = [str(value) for value in item.get("reasons") or [] if str(value)]
         # A transition may carry more than one canonical blocking reason. Capability
         # diagnostics must not disappear merely because the engine also recorded an
         # independent gate/validity reason. Diagnostics explain the exact recorded
         # candidate edge; they never turn that edge into authority.
         if "missing_explicit_or_authorized_capability" in reasons:
-            path = [str(value) for value in item.get("path_edge_ids") or [] if str(value)]
             if path:
                 edge = store.get_edge(path[-1])
                 diagnostic = capability_rejection_diagnostics(
@@ -138,6 +157,10 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
         item["reason_groups"] = _reason_groups(final_reasons)
         blocked.append(item)
     enriched["blocked_transitions"] = blocked
+    semantics = dict(enriched.get("semantics") or {})
+    semantics["blocked_boundary_evidence_uses_exact_recorded_path_only"] = True
+    semantics["blocked_transition_does_not_grant_authority"] = True
+    enriched["semantics"] = semantics
     return enriched
 
 
