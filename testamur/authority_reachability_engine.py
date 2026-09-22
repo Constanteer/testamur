@@ -5,7 +5,8 @@ from typing import Any, Iterable
 
 from .authority import TestamurAuthorityStore
 from .authority_boundaries import aggregate_trust_boundary_crossings, boundary_refs_from_crossings
-from .authority_reachability_v2 import CompromiseModel, authority_reachability as _legacy_authority_reachability
+from .authority_reachability_v2 import CompromiseModel
+from . import authority_reachability_v2 as reachability_v2
 
 
 def canonical_authority_reachability(
@@ -21,13 +22,13 @@ def canonical_authority_reachability(
 ) -> dict[str, Any]:
     """Run reachability and canonicalize only explicitly recorded boundary evidence.
 
-    The traversal engine records crossings on each reachable/action path.  This
+    The traversal engine records crossings on each reachable/action path. This
     wrapper derives the envelope projection exclusively from those recorded
-    crossings and the shared exact-path aggregator.  It does not inspect graph
+    crossings and the shared exact-path aggregator. It does not inspect graph
     connectivity, material lineage, reliance, or affectedness, and therefore
     cannot manufacture authority or a boundary crossing from adjacency alone.
     """
-    result = _legacy_authority_reachability(
+    result = reachability_v2.authority_reachability(
         store,
         starting_subject_ref,
         compromise_model=compromise_model,
