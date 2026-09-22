@@ -24,6 +24,12 @@ def _values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> set[str]:
 
 
 def _time(value: Any) -> datetime | None:
+    """Parse an explicitly zoned credential timestamp.
+
+    Authority validity is temporal evidence. A timezone-less timestamp does not
+    identify an observation instant, so it must remain unresolved rather than be
+    silently interpreted as UTC (or local time).
+    """
     if value is None:
         return None
     text = str(value).strip()
@@ -35,14 +41,15 @@ def _time(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(text)
     except (TypeError, ValueError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
     return parsed.astimezone(timezone.utc)
 
 
 def _at_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+    """Normalize a real observation instant; reject timezone ambiguity."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("authority credential observation instant requires an explicit timezone")
     return value.astimezone(timezone.utc)
 
 
@@ -57,7 +64,9 @@ def credential_constraints_satisfied(
     This function only answers whether observed credential metadata satisfies an
     already-explicit authority/acceptance edge. It must never be used to infer
     CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL from matching metadata alone.
-    Unknown non-empty constraints fail closed.
+    Unknown non-empty constraints fail closed. Credential validity timestamps and
+    the observation instant require explicit timezone information; ambiguous time
+    is never silently interpreted as UTC.
 
     Constraints that need graph context (for example resource/principal matching)
     are intentionally *not* marked handled here. Until a caller evaluates them
