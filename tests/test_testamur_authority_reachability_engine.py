@@ -33,18 +33,14 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
                 {"subject_ref": "resource:y", "trust_boundary_crossings": [crossing_b]},
             ],
             "actionable_capabilities": [],
-            # Deliberately simulate the legacy top-level lossy projection. The
-            # canonical wrapper must rebuild it only from recorded path evidence.
             "trust_boundary_crossings": [crossing_b],
             "trust_boundary_refs": ["boundary:provider"],
             "semantics": {},
         }
 
-    monkeypatch.setattr(engine, "_legacy_authority_reachability", fake_reachability)
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
     result = engine.canonical_authority_reachability(
-        object(),
-        "principal:a",
-        compromise_model="FULL_SUBJECT_COMPROMISE",
+        object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE"
     )
 
     assert [item["path_edge_ids"] for item in result["trust_boundary_crossings"]] == [
@@ -70,11 +66,9 @@ def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
             "semantics": {},
         }
 
-    monkeypatch.setattr(engine, "_legacy_authority_reachability", fake_reachability)
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
     result = engine.canonical_authority_reachability(
-        object(),
-        "principal:a",
-        compromise_model="FULL_SUBJECT_COMPROMISE",
+        object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE"
     )
 
     assert result["trust_boundary_crossings"] == []
