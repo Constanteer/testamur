@@ -63,6 +63,7 @@ def authority_reach_cli(
     ref: str,
     *,
     compromise_model: str,
+    capability_filter: list[tuple[str, str]] | None = None,
     max_depth: int = 8,
     max_paths: int = 256,
     expansion_budget: int = 10000,
@@ -72,12 +73,14 @@ def authority_reach_cli(
 
     CLI code must not reinterpret raw authority-engine payloads.  In particular,
     connectivity, material lineage, reliance, and affectedness are not permission
-    evidence, and unresolved constraints remain blocked.
+    evidence, unresolved constraints remain blocked, and capability filters only
+    select already-recorded authority rather than granting it.
     """
     return authority_reach_product(
         service,
         ref,
         compromise_model=compromise_model,
+        capability_filter=capability_filter,
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
@@ -90,6 +93,7 @@ def authority_blast_cli(
     refs: list[str],
     *,
     compromise_model: str,
+    capability_filter: list[tuple[str, str]] | None = None,
     max_depth: int = 8,
     max_paths: int = 256,
     expansion_budget: int = 10000,
@@ -100,6 +104,7 @@ def authority_blast_cli(
         service,
         refs,
         compromise_model=compromise_model,
+        capability_filter=capability_filter,
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
