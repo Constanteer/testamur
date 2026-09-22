@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from .authority import TestamurAuthorityStore
@@ -10,6 +10,26 @@ from . import authority_reachability_v2 as reachability_v2
 
 
 _REACHABILITY_SCHEMA_VERSION = "testamur.authority-reachability.v1"
+
+
+def _normalize_observation_instant(value: str | datetime) -> str:
+    """Normalize an explicit observation instant for provenance comparison.
+
+    This helper is deliberately temporal only. It never derives credential
+    validity, authority, or permission from graph connectivity.
+    """
+    if isinstance(value, datetime):
+        parsed = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    else:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("as_of must be an ISO timestamp or datetime")
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def canonical_authority_reachability(
@@ -28,10 +48,10 @@ def canonical_authority_reachability(
     The traversal engine records crossings on each reachable/action path. This
     wrapper derives the envelope projection exclusively from those recorded
     crossings and the shared exact-path aggregator. It also binds the returned
-    envelope to the requested seed/model/schema before exposing it as canonical.
-    It does not inspect graph connectivity, material lineage, reliance, or
-    affectedness, and therefore cannot manufacture authority or a boundary
-    crossing from adjacency alone.
+    envelope to the requested seed/model/schema/observation instant before
+    exposing it as canonical. It does not inspect graph connectivity, material
+    lineage, reliance, or affectedness, and therefore cannot manufacture
+    authority or a boundary crossing from adjacency alone.
     """
     requested_seed = str(starting_subject_ref or "").strip()
     result = reachability_v2.authority_reachability(
@@ -52,8 +72,16 @@ def canonical_authority_reachability(
     expected_model = CompromiseModel(str(compromise_model)).value
     if str(result.get("compromise_model") or "").strip() != expected_model:
         raise ValueError("authority reachability result does not match requested compromise model")
-    if not str(result.get("as_of") or "").strip():
+
+    returned_as_of = str(result.get("as_of") or "").strip()
+    if not returned_as_of:
         raise ValueError("authority reachability result must record its observation instant")
+    normalized_returned_as_of = _normalize_observation_instant(returned_as_of)
+    if as_of is not None:
+        expected_as_of = _normalize_observation_instant(as_of)
+        if normalized_returned_as_of != expected_as_of:
+            raise ValueError("authority reachability result does not match requested observation instant")
+    result["as_of"] = normalized_returned_as_of
 
     recorded_crossings: list[dict[str, Any]] = []
     for collection_name in ("reachable_subjects", "actionable_capabilities"):
@@ -70,6 +98,7 @@ def canonical_authority_reachability(
         "reachability_result_is_bound_to_requested_compromise_model": True,
         "reachability_result_requires_canonical_schema": True,
         "reachability_result_records_observation_instant": True,
+        "explicit_observation_instant_is_exactly_bound": True,
         "trust_boundary_crossings_preserve_exact_path_identity": True,
         "trust_boundary_crossings_use_canonical_aggregation": True,
         "trust_boundary_crossings_are_recorded_not_connectivity_inferred": True,
