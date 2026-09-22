@@ -14,6 +14,7 @@ from .component_identity import (
     canonical_hash,
     canonical_json,
 )
+from .repository_binding_lifecycle import repository_binding_with_state
 
 if TYPE_CHECKING:
     from .product_service import TestamurProductService
@@ -750,10 +751,16 @@ def scan_bound_project_supply_chain(
     project = service.projects.get_project(project_ref)
     if project is None:
         raise ValueError(f"project does not exist: {project_ref}")
-    binding = service.projects.repository_binding(project_ref, binding_key=binding_key)
+    binding = repository_binding_with_state(
+        service.projects, project_ref, binding_key=binding_key
+    )
     if binding is None:
         raise ValueError(
             f"project has no repository binding named {binding_key!r}; bind a repository before scanning"
+        )
+    if not binding["enabled"]:
+        raise ValueError(
+            f"repository binding {binding_key!r} is disabled; enable it before scanning"
         )
     revision = dict(binding["revision"])
     kind = str(revision.get("kind") or "")
