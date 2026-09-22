@@ -9,6 +9,9 @@ from .authority_reachability_v2 import CompromiseModel
 from . import authority_reachability_v2 as reachability_v2
 
 
+_REACHABILITY_SCHEMA_VERSION = "testamur.authority-reachability.v1"
+
+
 def canonical_authority_reachability(
     store: TestamurAuthorityStore,
     starting_subject_ref: str,
@@ -20,14 +23,17 @@ def canonical_authority_reachability(
     expansion_budget: int = 10000,
     as_of: str | datetime | None = None,
 ) -> dict[str, Any]:
-    """Run reachability and canonicalize only explicitly recorded boundary evidence.
+    """Run reachability and canonicalize only explicitly recorded authority evidence.
 
     The traversal engine records crossings on each reachable/action path. This
     wrapper derives the envelope projection exclusively from those recorded
-    crossings and the shared exact-path aggregator. It does not inspect graph
-    connectivity, material lineage, reliance, or affectedness, and therefore
-    cannot manufacture authority or a boundary crossing from adjacency alone.
+    crossings and the shared exact-path aggregator. It also binds the returned
+    envelope to the requested seed/model/schema before exposing it as canonical.
+    It does not inspect graph connectivity, material lineage, reliance, or
+    affectedness, and therefore cannot manufacture authority or a boundary
+    crossing from adjacency alone.
     """
+    requested_seed = str(starting_subject_ref or "").strip()
     result = reachability_v2.authority_reachability(
         store,
         starting_subject_ref,
@@ -38,6 +44,16 @@ def canonical_authority_reachability(
         expansion_budget=expansion_budget,
         as_of=as_of,
     )
+
+    if str(result.get("schema_version") or "").strip() != _REACHABILITY_SCHEMA_VERSION:
+        raise ValueError("authority reachability returned an unsupported schema version")
+    if str(result.get("starting_subject_ref") or "").strip() != requested_seed:
+        raise ValueError("authority reachability result does not match requested starting subject")
+    expected_model = CompromiseModel(str(compromise_model)).value
+    if str(result.get("compromise_model") or "").strip() != expected_model:
+        raise ValueError("authority reachability result does not match requested compromise model")
+    if not str(result.get("as_of") or "").strip():
+        raise ValueError("authority reachability result must record its observation instant")
 
     recorded_crossings: list[dict[str, Any]] = []
     for collection_name in ("reachable_subjects", "actionable_capabilities"):
@@ -50,6 +66,10 @@ def canonical_authority_reachability(
     result["trust_boundary_refs"] = boundary_refs_from_crossings(crossings)
     result["semantics"] = {
         **dict(result.get("semantics") or {}),
+        "reachability_result_is_bound_to_requested_seed": True,
+        "reachability_result_is_bound_to_requested_compromise_model": True,
+        "reachability_result_requires_canonical_schema": True,
+        "reachability_result_records_observation_instant": True,
         "trust_boundary_crossings_preserve_exact_path_identity": True,
         "trust_boundary_crossings_use_canonical_aggregation": True,
         "trust_boundary_crossings_are_recorded_not_connectivity_inferred": True,
