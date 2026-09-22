@@ -23,35 +23,13 @@ def canonical_authority_blast_radius(
 ) -> dict[str, Any]:
     """Run one exact authority-reachability traversal per explicit compromise seed.
 
-    This orchestration deliberately does not combine graphs before traversal. Each
-    seed is evaluated independently by the authority engine and only the recorded
-    per-seed results are aggregated afterwards. Material lineage, reliance,
-    affectedness, common targets, and graph connectivity therefore cannot create
-    compromise-seed provenance or authority that the engine did not record.
-
-    A blast evaluation also has one temporal observation point. When callers do
-    not supply ``as_of``, snapshot UTC once here and pass that same instant to
-    every seed traversal. Credential expiry, token audience/scope constraints,
-    acceptance edges, and delegated permissions therefore cannot disagree merely
-    because separate seed traversals happened on opposite sides of a time boundary.
-    The normalized observation instant emitted by reachability is required to be
-    identical for every seed and is preserved on the blast envelope for audit.
-
-    Reachability results are also bound to the normalized compromise model used
-    for this evaluation. A result produced under another compromise assumption
-    cannot be mixed into the same blast envelope, even if its seed/path happens
-    to match. This keeps model assumptions as provenance rather than presentation.
-
-    Finally, every returned reachability envelope is bound to the exact seed whose
-    traversal produced it. Merely returning the right *set* of seed refs is not
-    sufficient: a swapped or mislabeled result would attach exact evidence and
-    capabilities to the wrong compromise assumption. The schema version is also
-    checked before aggregation so an unrelated projection cannot masquerade as an
-    engine reachability result.
+    Seeds are evaluated independently at one observation instant. Only recorded
+    per-seed authority evidence is aggregated afterwards; material lineage,
+    reliance, affectedness, common targets, and graph connectivity cannot create
+    compromise provenance or authority.
     """
-    # Local import avoids making the reachability module depend on this orchestration
-    # while it still exposes the legacy authority_blast_radius entry point.
-    from .authority_reachability_v2 import _normalize_model, authority_reachability
+    from .authority_reachability_engine import canonical_authority_reachability
+    from .authority_reachability_v2 import _normalize_model
 
     refs = [compromised_refs] if isinstance(compromised_refs, str) else list(compromised_refs)
     seeds = sorted({str(ref).strip() for ref in refs if str(ref).strip()})
@@ -62,7 +40,7 @@ def canonical_authority_blast_radius(
     evaluation_as_of: str | datetime = as_of if as_of is not None else datetime.now(timezone.utc)
     results: list[dict[str, Any]] = []
     for seed_ref in seeds:
-        result = authority_reachability(
+        result = canonical_authority_reachability(
             store,
             seed_ref,
             compromise_model=model,
@@ -98,6 +76,7 @@ def canonical_authority_blast_radius(
         "blast_results_are_bound_to_one_compromise_model": True,
         "blast_results_are_bound_to_requested_seed_traversals": True,
         "blast_results_require_authority_reachability_schema": True,
+        "blast_results_use_canonical_reachability_projection": True,
     }
     return envelope
 
