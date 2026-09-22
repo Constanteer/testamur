@@ -4,32 +4,53 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 
-def _set(value: Any) -> set[str]:
-    if value is None:
-        return set()
+def _explicit_string_set(value: Any) -> tuple[set[str], bool]:
+    """Return explicit string claims and whether their representation is valid.
+
+    Authority evidence is not a coercion surface: numbers, mappings, mixed
+    sequences, and empty claim containers must not become credential claims by
+    stringification.
+    """
     if isinstance(value, str):
-        value = value.strip()
-        return {value} if value else set()
+        text = value.strip()
+        return ({text}, True) if text else (set(), False)
     if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
-        return {str(item).strip() for item in value if str(item).strip()}
-    text = str(value).strip()
-    return {text} if text else set()
+        if not value:
+            return set(), False
+        result: set[str] = set()
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                return set(), False
+            result.add(item.strip())
+        return result, bool(result)
+    return set(), False
 
 
-def _values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> set[str]:
-    result: set[str] = set()
+def _alias_values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple[set[str], bool, bool]:
+    """Read alternate encodings of one logical claim without unioning grants.
+
+    Returns (values, present, valid). Multiple aliases may coexist only when
+    they encode exactly the same set. Conflicting aliases are ambiguous evidence,
+    not additive authority.
+    """
+    observed: list[set[str]] = []
     for key in aliases:
-        result.update(_set(source.get(key)))
-    return result
+        if key not in source or source.get(key) is None:
+            continue
+        values, valid = _explicit_string_set(source.get(key))
+        if not valid:
+            return set(), True, False
+        observed.append(values)
+    if not observed:
+        return set(), False, True
+    first = observed[0]
+    if any(values != first for values in observed[1:]):
+        return set(), True, False
+    return set(first), True, True
 
 
 def _time(value: Any) -> datetime | None:
-    """Parse an explicitly zoned credential timestamp.
-
-    Authority validity is temporal evidence. A timezone-less timestamp does not
-    identify an observation instant, so it must remain unresolved rather than be
-    silently interpreted as UTC (or local time).
-    """
+    """Parse an explicitly zoned credential timestamp."""
     if value is None:
         return None
     text = str(value).strip()
@@ -47,7 +68,6 @@ def _time(value: Any) -> datetime | None:
 
 
 def _at_utc(value: datetime) -> datetime:
-    """Normalize a real observation instant; reject timezone ambiguity."""
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("authority credential observation instant requires an explicit timezone")
     return value.astimezone(timezone.utc)
@@ -61,17 +81,10 @@ def credential_constraints_satisfied(
 ) -> tuple[bool, list[str], list[str]]:
     """Evaluate explicit credential requirements without creating authority.
 
-    This function only answers whether observed credential metadata satisfies an
-    already-explicit authority/acceptance edge. It must never be used to infer
-    CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL from matching metadata alone.
-    Unknown non-empty constraints fail closed. Credential validity timestamps and
-    the observation instant require explicit timezone information; ambiguous time
-    is never silently interpreted as UTC.
-
-    Constraints that need graph context (for example resource/principal matching)
-    are intentionally *not* marked handled here. Until a caller evaluates them
-    against an exact graph subject they remain unresolved rather than silently
-    disappearing from the authority decision.
+    This only evaluates metadata on an already-explicit authority/acceptance
+    edge. It never infers CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL. Claim aliases
+    are alternate encodings, not additive grants: malformed or conflicting
+    audience/scope/issuer/tenant evidence remains unresolved and fails closed.
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
@@ -119,19 +132,18 @@ def credential_constraints_satisfied(
     handled: set[str] = {
         "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
         "approval_required", "human_confirmation_required", "mfa_required",
-        # Singular service_ref is graph-routing metadata consumed by
-        # reachability's exact ACCEPTS_CREDENTIAL lookup. Plural service_refs is
-        # deliberately not accepted until traversal implements exact multi-target
-        # routing; otherwise it would be a silently ignored authority condition.
         "service_ref",
     }
     for required_aliases, actual_aliases, label, require_subset in families:
         handled.update(required_aliases)
-        required = _values(constraints, required_aliases)
-        if not required:
+        required, required_present, required_valid = _alias_values(constraints, required_aliases)
+        if required_present and not required_valid:
+            unresolved.add(label)
             continue
-        actual = _values(attributes, actual_aliases)
-        if not actual:
+        if not required_present:
+            continue
+        actual, actual_present, actual_valid = _alias_values(attributes, actual_aliases)
+        if not actual_present or not actual_valid:
             unresolved.add(label)
         elif require_subset:
             if not required <= actual:
