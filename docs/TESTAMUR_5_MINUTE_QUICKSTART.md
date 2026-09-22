@@ -46,7 +46,7 @@ Treat this first successful scan as the **baseline observation**. It records man
 
 In the Web product, the equivalent first-run path is **Create project → Add first monitor → Record first baseline**. The baseline is useful because later observations have something explicit to compare against; it is not a green verdict or a trust score.
 
-Run the scan again without changing manifests: the canonical statements are intended to remain idempotent rather than manufacturing a meaningful change.
+Run the scan again without changing manifests: Testamur appends a new immutable **scan observation event** because a new observation happened, while unchanged manifest/dependency state records remain content-deduplicated. A second observation is not evidence that the dependency state changed; Compare decides whether a mechanical difference exists.
 
 ## Minute 3 — compare a later observation
 

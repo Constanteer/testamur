@@ -62,3 +62,10 @@ def test_quickstart_names_only_current_project_mcp_tools() -> None:
     ):
         assert tool in quickstart
     assert "testamur.project_advisories" not in quickstart
+
+
+def test_quickstart_distinguishes_scan_event_from_dependency_state_change() -> None:
+    quickstart = (Path(__file__).parents[1] / "docs" / "TESTAMUR_5_MINUTE_QUICKSTART.md").read_text()
+    assert "new immutable **scan observation event**" in quickstart
+    assert "unchanged manifest/dependency state records remain content-deduplicated" in quickstart
+    assert "A second observation is not evidence that the dependency state changed" in quickstart
