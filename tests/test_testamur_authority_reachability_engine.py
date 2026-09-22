@@ -64,6 +64,7 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     assert result["semantics"]["reachability_result_is_bound_to_requested_compromise_model"] is True
     assert result["semantics"]["reachability_result_requires_canonical_schema"] is True
     assert result["semantics"]["reachability_result_records_observation_instant"] is True
+    assert result["semantics"]["explicit_observation_instant_is_exactly_bound"] is True
 
 
 def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
@@ -104,4 +105,36 @@ def test_canonical_projection_fails_closed_on_envelope_provenance_mismatch(
     with pytest.raises(ValueError, match=message):
         engine.canonical_authority_reachability(
             object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE"
+        )
+
+
+def test_canonical_projection_binds_explicit_observation_instant(monkeypatch) -> None:
+    def fake_reachability(*args, **kwargs):
+        result = _base_result()
+        result["as_of"] = "2026-09-22T08:00:00+08:00"
+        return result
+
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
+    result = engine.canonical_authority_reachability(
+        object(),
+        "principal:a",
+        compromise_model="FULL_SUBJECT_COMPROMISE",
+        as_of="2026-09-22T00:00:00Z",
+    )
+    assert result["as_of"] == "2026-09-22T00:00:00Z"
+
+
+def test_canonical_projection_rejects_different_observation_instant(monkeypatch) -> None:
+    def fake_reachability(*args, **kwargs):
+        result = _base_result()
+        result["as_of"] = "2026-09-22T00:00:01Z"
+        return result
+
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
+    with pytest.raises(ValueError, match="requested observation instant"):
+        engine.canonical_authority_reachability(
+            object(),
+            "principal:a",
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+            as_of="2026-09-22T00:00:00Z",
         )
