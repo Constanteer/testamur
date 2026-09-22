@@ -28,18 +28,18 @@ A Source identifies something you can observe over time. A Revision is one recor
 From a repository you already care about, create/import a Project and bind the repository as scanner input:
 
 ```bash
-testamur product project import . --name demo-project
-testamur product project bind-repo demo-project .
-testamur product project repo demo-project
+testamur project import . --name demo-project
+testamur project bind-repo demo-project .
+testamur-project-repo show demo-project
 ```
 
-A Project is a product container. Binding a repository records where scanner input comes from; it does not mean every file is relied upon.
+A Project is a product container. Binding a repository records where scanner input comes from; it does not mean every file is relied upon. `testamur-project-repo show` reports the binding lifecycle state; disabling a binding only removes scanner eligibility and does not erase its recorded identity/history.
 
 ## Minute 2 — record the first baseline
 
 ```bash
-testamur product project scan demo-project
-testamur product project supply-chain demo-project
+testamur project scan demo-project
+testamur project supply-chain demo-project
 ```
 
 Treat this first successful scan as the **baseline observation**. It records manifest evidence such as lockfiles and declared dependency revisions. Recording a package/version does not verify the package and does not assert that it is safe.
@@ -53,9 +53,9 @@ Run the scan again without changing manifests: the canonical statements are inte
 After changing a dependency or manifest, scan again and compare the immutable scan revisions:
 
 ```bash
-testamur product project scan demo-project
-testamur product project supply-chain-history demo-project
-testamur product project supply-chain-diff demo-project
+testamur project scan demo-project
+testamur project supply-chain-history demo-project
+testamur project supply-chain-diff demo-project
 ```
 
 The diff can say “dependency added”, “dependency removed”, “version changed”, or “manifest bytes changed”. It must not silently turn “changed” into “invalid”, “vulnerable”, or “broken”.
