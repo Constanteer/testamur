@@ -22,6 +22,7 @@ def test_demo_handoff_moves_user_to_real_project_without_semantic_shortcuts():
         'fetched ≠ relied',
         'changed ≠ invalid',
         'stale ≠ false',
+        'EXPOSED_TO_MODEL ≠ RELIED',
         'recorded observation is evidence, not a verification verdict',
     ):
         assert phrase in script
