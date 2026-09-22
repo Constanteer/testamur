@@ -75,10 +75,11 @@ A source being fetched or shown to an agent is evidence of exposure, not automat
 For a first run against an existing repository, use the project workflow described in the five-minute quickstart:
 
 ```bash
-testamur product project import . --name demo-project
-testamur product project bind-repo demo-project .
-testamur product project scan demo-project
-testamur product project supply-chain demo-project
+testamur project import . --name demo-project
+testamur project bind-repo demo-project .
+testamur-project-repo show demo-project
+testamur project scan demo-project
+testamur project supply-chain demo-project
 ```
 
 The initial importer recognizes pinned Python requirements, `uv.lock`, `poetry.lock`, npm `package-lock.json` / `npm-shrinkwrap.json`, `Cargo.lock`, and `go.sum`. It records exact manifest digests, canonical package/component identities, dependency observations and durable project scan relations.
