@@ -50,6 +50,17 @@ def _project_crossing(value: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _project_recorded_crossings(item: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Copy only trust-boundary crossings already recorded on this exact record."""
+    crossings = [
+        _project_crossing(value)
+        for value in item.get("trust_boundary_crossings") or []
+        if isinstance(value, Mapping)
+    ]
+    crossings.sort(key=trust_boundary_crossing_identity)
+    return crossings
+
+
 def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     """Stable product projection for authority reachability diagnostics.
 
@@ -72,6 +83,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
         reason_counts.update(reasons)
         failed_counts.update(failed)
         unresolved_counts.update(unresolved)
+        blocked_crossings = _project_recorded_crossings(item)
         projected.append(
             {
                 "edge_id": item.get("edge_id"),
@@ -85,6 +97,8 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "unresolved_constraints": unresolved,
                 "path_edge_ids": list(item.get("path_edge_ids") or []),
                 "supporting_edge_ids": list(item.get("supporting_edge_ids") or []),
+                "boundary_refs": sorted({str(value) for value in item.get("boundary_refs") or []}),
+                "trust_boundary_crossings": blocked_crossings,
                 "evidence_state": item.get("evidence_state"),
                 "candidate_capabilities": [dict(value) for value in item.get("candidate_capabilities") or [] if isinstance(value, Mapping)],
                 "inherited_capability_budget": [dict(value) for value in item.get("inherited_capability_budget") or [] if isinstance(value, Mapping)],
@@ -117,6 +131,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
             "reason_groups_are_engine_recorded_not_product_inferred": True,
             "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
             "trust_boundary_crossings_preserve_exact_path_identity": True,
+            "blocked_boundary_evidence_is_engine_recorded_not_product_inferred": True,
         },
     }
 
@@ -159,6 +174,7 @@ def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
             "capability_constraints_are_not_collapsed": True,
             "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
             "trust_boundary_crossings_preserve_exact_path_identity": True,
+            "blocked_boundary_evidence_is_engine_recorded_not_product_inferred": True,
         },
     }
 
