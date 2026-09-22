@@ -28,6 +28,11 @@ def _copy_reason_groups(value: Any) -> dict[str, list[str]]:
     }
 
 
+def _copy_crossings(value: Any) -> list[dict[str, Any]]:
+    """Copy engine-recorded crossing evidence without reconstructing graph paths."""
+    return [dict(item) for item in value or [] if isinstance(item, Mapping)]
+
+
 def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Project the stable authority product result into a Web-safe view model.
 
@@ -68,13 +73,15 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "unresolved_constraints": list(item.get("unresolved_constraints") or []),
             "path_edge_ids": list(item.get("path_edge_ids") or []),
             "supporting_edge_ids": list(item.get("supporting_edge_ids") or []),
+            "boundary_refs": list(item.get("boundary_refs") or []),
+            "trust_boundary_crossings": _copy_crossings(item.get("trust_boundary_crossings")),
             "evidence_state": item.get("evidence_state"),
             "candidate_capabilities": [dict(value) for value in item.get("candidate_capabilities") or [] if isinstance(value, Mapping)],
             "inherited_capability_budget": [dict(value) for value in item.get("inherited_capability_budget") or [] if isinstance(value, Mapping)],
             "compromise_seed_refs": list(item.get("compromise_seed_refs") or []),
         })
 
-    crossings = [dict(item) for item in diagnostics.get("trust_boundary_crossings", []) if isinstance(item, Mapping)]
+    crossings = _copy_crossings(diagnostics.get("trust_boundary_crossings"))
     return {
         "ok": True,
         "schema": "testamur.web.authority-view.v1",
@@ -105,6 +112,7 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "reason_groups_are_canonical_not_web_inferred": True,
             "compromise_seed_provenance_is_canonical_not_web_inferred": True,
             "trust_boundary_crossings_preserve_exact_path_identity": True,
+            "blocked_boundary_evidence_is_canonical_not_web_inferred": True,
         },
     }
 
