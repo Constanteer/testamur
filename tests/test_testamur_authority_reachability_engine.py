@@ -43,8 +43,8 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     def fake_reachability(*args, **kwargs):
         result = _base_result()
         result["reachable_subjects"] = [
-            {"subject_ref": "resource:x", "trust_boundary_crossings": [crossing_a]},
-            {"subject_ref": "resource:y", "trust_boundary_crossings": [crossing_b]},
+            {"subject_ref": "resource:x", "path_edge_ids": crossing_a["path_edge_ids"], "trust_boundary_crossings": [crossing_a]},
+            {"subject_ref": "resource:y", "path_edge_ids": crossing_b["path_edge_ids"], "trust_boundary_crossings": [crossing_b]},
         ]
         result["trust_boundary_crossings"] = [crossing_b]
         result["trust_boundary_refs"] = ["boundary:provider"]
@@ -62,6 +62,7 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     assert result["semantics"]["trust_boundary_crossings_preserve_exact_path_identity"] is True
     assert result["semantics"]["trust_boundary_crossings_use_canonical_aggregation"] is True
     assert result["semantics"]["trust_boundary_crossings_are_recorded_not_connectivity_inferred"] is True
+    assert result["semantics"]["trust_boundary_crossings_are_bound_to_containing_exact_path"] is True
     assert result["semantics"]["reachability_result_is_bound_to_requested_seed"] is True
     assert result["semantics"]["reachability_result_is_bound_to_requested_compromise_model"] is True
     assert result["semantics"]["reachability_result_requires_canonical_schema"] is True
@@ -85,6 +86,38 @@ def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
 
     assert result["trust_boundary_crossings"] == []
     assert result["trust_boundary_refs"] == []
+
+
+@pytest.mark.parametrize(
+    ("crossing", "message"),
+    [
+        (
+            {"edge_id": "edge:provider", "boundary_ref": "boundary:p", "path_position": 1, "path_edge_ids": ["edge:other", "edge:provider"]},
+            "exact path does not match",
+        ),
+        (
+            {"edge_id": "edge:provider", "boundary_ref": "boundary:p", "path_position": 2, "path_edge_ids": ["edge:a", "edge:provider"]},
+            "path position is outside",
+        ),
+        (
+            {"edge_id": "edge:wrong", "boundary_ref": "boundary:p", "path_position": 1, "path_edge_ids": ["edge:a", "edge:provider"]},
+            "edge does not match",
+        ),
+    ],
+)
+def test_canonical_projection_rejects_crossing_not_bound_to_containing_exact_path(monkeypatch, crossing, message) -> None:
+    def fake_reachability(*args, **kwargs):
+        result = _base_result()
+        result["reachable_subjects"] = [{
+            "subject_ref": "resource:x",
+            "path_edge_ids": ["edge:a", "edge:provider"],
+            "trust_boundary_crossings": [crossing],
+        }]
+        return result
+
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
+    with pytest.raises(ValueError, match=message):
+        engine.canonical_authority_reachability(object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE")
 
 
 @pytest.mark.parametrize(
