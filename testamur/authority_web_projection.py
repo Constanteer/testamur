@@ -35,7 +35,8 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
     adjacency can create authority. Exact denied candidates and inherited delegation
     budgets remain diagnostic evidence and are never promoted to capabilities.
     Canonical denial groups pass through unchanged in meaning; Web does not infer
-    them from raw reason strings.
+    them from raw reason strings. Engine-recorded compromise provenance and exact
+    trust-boundary paths are retained rather than reconstructed from UI adjacency.
     """
     if payload.get("ok") is not True:
         return dict(payload)
@@ -70,6 +71,7 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "evidence_state": item.get("evidence_state"),
             "candidate_capabilities": [dict(value) for value in item.get("candidate_capabilities") or [] if isinstance(value, Mapping)],
             "inherited_capability_budget": [dict(value) for value in item.get("inherited_capability_budget") or [] if isinstance(value, Mapping)],
+            "compromise_seed_refs": list(item.get("compromise_seed_refs") or []),
         })
 
     crossings = [dict(item) for item in diagnostics.get("trust_boundary_crossings", []) if isinstance(item, Mapping)]
@@ -101,6 +103,8 @@ def project_authority_web_view(payload: Mapping[str, Any]) -> dict[str, Any]:
             "reachable_does_not_mean_exercised": True,
             "denied_budget_is_diagnostic_not_authority": True,
             "reason_groups_are_canonical_not_web_inferred": True,
+            "compromise_seed_provenance_is_canonical_not_web_inferred": True,
+            "trust_boundary_crossings_preserve_exact_path_identity": True,
         },
     }
 
