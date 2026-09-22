@@ -203,18 +203,28 @@ def project_supply_chain_projections(
     projections: list[dict[str, Any]] = []
     seen_binding_ids: set[str] = set()
     legacy_added = False
-    for relation in service.records.relations_for(
-        str(project_id),
-        direction="outgoing",
-        relation_types=["cites"],
-        limit=500,
-    ):
-        revision = service.records.get_revision(str(relation.get("to_ref") or ""))
-        if revision is None:
-            continue
-        record = service.records.get_record(str(revision.get("record_id") or ""))
-        if record is None or record.get("record_kind") != "supply-chain-scan":
-            continue
+
+    # Do not use relations_for()/history() here: both are intentionally bounded
+    # read APIs. A very active binding must not push another binding's latest
+    # immutable observation out of the Project projection.
+    with service.records.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT rec.record_json AS record_json, rev.record_json AS revision_json
+            FROM testamur_relations AS rel
+            JOIN testamur_record_revisions AS rev ON rev.revision_id = rel.to_ref
+            JOIN testamur_records AS rec ON rec.record_id = rev.record_id
+            WHERE rel.from_ref = ?
+              AND rel.relation_type = 'cites'
+              AND rec.record_kind = 'supply-chain-scan'
+            ORDER BY rev.ordinal DESC
+            """,
+            (str(project_id),),
+        ).fetchall()
+
+    for row in rows:
+        record = json.loads(str(row["record_json"]))
+        revision = json.loads(str(row["revision_json"]))
         try:
             statement = json.loads(str(revision.get("statement") or "{}"))
         except json.JSONDecodeError:
