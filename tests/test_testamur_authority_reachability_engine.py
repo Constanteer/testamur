@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
 import testamur
@@ -65,6 +67,7 @@ def test_canonical_projection_preserves_distinct_exact_crossing_paths(monkeypatc
     assert result["semantics"]["reachability_result_requires_canonical_schema"] is True
     assert result["semantics"]["reachability_result_records_observation_instant"] is True
     assert result["semantics"]["explicit_observation_instant_is_exactly_bound"] is True
+    assert result["semantics"]["observation_instant_requires_explicit_timezone"] is True
 
 
 def test_canonical_projection_does_not_invent_crossings(monkeypatch) -> None:
@@ -137,4 +140,34 @@ def test_canonical_projection_rejects_different_observation_instant(monkeypatch)
             "principal:a",
             compromise_model="FULL_SUBJECT_COMPROMISE",
             as_of="2026-09-22T00:00:00Z",
+        )
+
+
+@pytest.mark.parametrize(
+    "ambiguous_as_of",
+    ["2026-09-22T00:00:00", datetime(2026, 9, 22, 0, 0, 0)],
+)
+def test_canonical_projection_rejects_timezone_ambiguous_requested_instant(
+    monkeypatch, ambiguous_as_of
+) -> None:
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", lambda *args, **kwargs: _base_result())
+    with pytest.raises(ValueError, match="explicit timezone offset"):
+        engine.canonical_authority_reachability(
+            object(),
+            "principal:a",
+            compromise_model="FULL_SUBJECT_COMPROMISE",
+            as_of=ambiguous_as_of,
+        )
+
+
+def test_canonical_projection_rejects_timezone_ambiguous_returned_instant(monkeypatch) -> None:
+    def fake_reachability(*args, **kwargs):
+        result = _base_result()
+        result["as_of"] = "2026-09-22T00:00:00"
+        return result
+
+    monkeypatch.setattr(engine.reachability_v2, "authority_reachability", fake_reachability)
+    with pytest.raises(ValueError, match="explicit timezone offset"):
+        engine.canonical_authority_reachability(
+            object(), "principal:a", compromise_model="FULL_SUBJECT_COMPROMISE"
         )
