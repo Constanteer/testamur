@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from .authority_filter import normalize_capability_filter
 from .authority_product_api import project_product_authority_envelope
 
 
@@ -11,21 +12,6 @@ class AuthorityProductService(Protocol):
     def authority_reach(self, ref: str, **options: Any) -> dict[str, Any]: ...
 
     def authority_blast(self, refs: list[str], **options: Any) -> dict[str, Any]: ...
-
-
-def _capability_filter(value: list[tuple[str, str]] | None) -> list[tuple[str, str]] | None:
-    """Validate an explicit namespace/action filter without inventing wildcard authority."""
-    if value is None:
-        return None
-    normalized: list[tuple[str, str]] = []
-    for item in value:
-        if not isinstance(item, (tuple, list)) or len(item) != 2:
-            raise ValueError("capability_filter entries must be namespace/action pairs")
-        namespace, action = item
-        if not isinstance(namespace, str) or not namespace.strip() or not isinstance(action, str) or not action.strip():
-            raise ValueError("capability_filter namespace/action values must be non-empty strings")
-        normalized.append((namespace.strip(), action.strip()))
-    return normalized
 
 
 def authority_reach_product(
@@ -50,7 +36,7 @@ def authority_reach_product(
     envelope = service.authority_reach(
         ref,
         compromise_model=compromise_model,
-        capability_filter=_capability_filter(capability_filter),
+        capability_filter=normalize_capability_filter(capability_filter),
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
@@ -74,7 +60,7 @@ def authority_blast_product(
     envelope = service.authority_blast(
         refs,
         compromise_model=compromise_model,
-        capability_filter=_capability_filter(capability_filter),
+        capability_filter=normalize_capability_filter(capability_filter),
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
