@@ -4,6 +4,17 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
+def _exact_refs(values: Sequence[str], *, field: str) -> list[str]:
+    if isinstance(values, (str, bytes)):
+        raise ValueError(f"{field} must be a sequence of exact string refs")
+    refs: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} must contain only non-empty exact string refs")
+        refs.append(value)
+    return refs
+
+
 def blocked_transition_record(
     *,
     edge_id: str,
@@ -21,14 +32,25 @@ def blocked_transition_record(
 ) -> dict[str, Any]:
     """Build a blocked authority record from already-established exact evidence.
 
-    This helper deliberately does no graph lookup.  In particular it cannot infer
+    This helper deliberately does no graph lookup. In particular it cannot infer
     a boundary, permission, credential validity, or capability from connectivity,
-    lineage, reliance, or affectedness.  Callers must pass the boundary crossings
+    lineage, reliance, or affectedness. Callers must pass the boundary crossings
     computed for the exact attempted ``path_edge_ids``.
+
+    Provenance identifiers are fail-closed: arbitrary scalars are never coerced
+    with ``str(...)`` into evidence. This keeps a malformed caller value from
+    manufacturing an edge or trust-boundary identity.
     """
-    path = [str(item) for item in path_edge_ids]
-    boundaries = [str(item) for item in boundary_refs]
-    crossings = [dict(item) for item in trust_boundary_crossings]
+    path = _exact_refs(path_edge_ids, field="path_edge_ids")
+    supporting = _exact_refs(supporting_edge_ids, field="supporting_edge_ids")
+    boundaries = _exact_refs(boundary_refs, field="boundary_refs")
+    if isinstance(trust_boundary_crossings, (str, bytes)):
+        raise ValueError("trust_boundary_crossings must be a sequence of exact crossing records")
+    crossings: list[dict[str, Any]] = []
+    for item in trust_boundary_crossings:
+        if not isinstance(item, Mapping):
+            raise ValueError("trust_boundary_crossings must contain only mapping records")
+        crossings.append(dict(item))
 
     for crossing in crossings:
         crossing_path = crossing.get("path_edge_ids")
@@ -41,7 +63,7 @@ def blocked_transition_record(
         if not isinstance(edge_ref, str) or edge_ref not in path:
             raise ValueError("blocked transition crossing edge_id must occur on the attempted path")
 
-    crossing_boundaries = {str(item["boundary_ref"]) for item in crossings}
+    crossing_boundaries = {item["boundary_ref"] for item in crossings}
     if set(boundaries) != crossing_boundaries:
         raise ValueError("boundary_refs must exactly match trust_boundary_crossings")
 
@@ -51,7 +73,7 @@ def blocked_transition_record(
         "target_ref": target_ref,
         "relation_type": relation_type,
         "path_edge_ids": path,
-        "supporting_edge_ids": list(supporting_edge_ids),
+        "supporting_edge_ids": supporting,
         "reasons": list(reasons),
         "unresolved_constraints": list(unresolved_constraints),
         "reachability_class": reachability_class,
