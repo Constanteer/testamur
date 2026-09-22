@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Mapping
 
+from .authority_boundaries import trust_boundary_crossing_identity
+
 
 _REASON_GROUPS = (
     "credential_or_token",
@@ -26,11 +28,25 @@ def _copy_seed_provenance(item: Mapping[str, Any]) -> dict[str, Any]:
     """Copy engine-recorded compromise provenance without reconstructing it.
 
     A product client must never infer which compromise seed reached an item from
-    path shape, subject adjacency, lineage, or a shared target.  Omission remains
+    path shape, subject adjacency, lineage, or a shared target. Omission remains
     unknown: an empty list means the canonical engine did not project provenance.
     """
     return {
         "compromise_seed_refs": sorted({str(value) for value in item.get("compromise_seed_refs") or []}),
+    }
+
+
+def _project_crossing(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Preserve one engine-recorded trust-boundary crossing exactly.
+
+    Product projection must not collapse crossings by provider edge or boundary.
+    Distinct exact authority paths remain distinct evidence. Missing path evidence
+    stays missing; this layer never reconstructs it from connectivity or lineage.
+    """
+    return {
+        **dict(value),
+        "path_edge_ids": list(value.get("path_edge_ids") or []),
+        **_copy_seed_provenance(value),
     }
 
 
@@ -77,8 +93,12 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
         )
     projected.sort(key=lambda item: (str(item["edge_id"] or ""), str(item["target_ref"] or "")))
 
-    crossings = [dict(value) for value in result.get("trust_boundary_crossings") or []]
-    crossings.sort(key=lambda item: (int(item.get("path_position") or 0), str(item.get("edge_id") or ""), str(item.get("boundary_ref") or "")))
+    crossings = [
+        _project_crossing(value)
+        for value in result.get("trust_boundary_crossings") or []
+        if isinstance(value, Mapping)
+    ]
+    crossings.sort(key=trust_boundary_crossing_identity)
     return {
         "schema_version": "testamur.authority-product-diagnostics.v1",
         "blocked_transitions": projected,
@@ -96,6 +116,7 @@ def project_authority_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
             "denied_budget_is_diagnostic_not_authority": True,
             "reason_groups_are_engine_recorded_not_product_inferred": True,
             "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
+            "trust_boundary_crossings_preserve_exact_path_identity": True,
         },
     }
 
@@ -137,6 +158,7 @@ def project_authority_result(result: Mapping[str, Any]) -> dict[str, Any]:
             "affectedness_does_not_seed_compromise": True,
             "capability_constraints_are_not_collapsed": True,
             "compromise_seed_provenance_is_engine_recorded_not_product_inferred": True,
+            "trust_boundary_crossings_preserve_exact_path_identity": True,
         },
     }
 
