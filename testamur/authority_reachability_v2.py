@@ -289,10 +289,10 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
             if relation == AuthorityRelationType.CAN_READ.value and target_kind in _CREDENTIAL_KINDS:
                 propagate = True
                 next_class = AuthorityReachabilityClass.CREDENTIAL_ACQUIRED.value
-                next_budget = None
+                next_budget = budget
             elif relation == AuthorityRelationType.EXPOSES.value:
                 next_class = AuthorityReachabilityClass.CREDENTIAL_ACQUIRED.value if target_kind in _CREDENTIAL_KINDS else AuthorityReachabilityClass.CONTROLLED.value
-                next_budget = None
+                next_budget = budget
             elif relation == AuthorityRelationType.DELEGATES.value:
                 next_budget = downstream_budget(edge, budget)
                 if next_budget == ():
@@ -306,7 +306,7 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
                     ))
                     propagate = False
             elif relation in {AuthorityRelationType.CAN_AUTHENTICATE_AS.value, AuthorityRelationType.CAN_IMPERSONATE.value}:
-                next_budget = downstream_budget(edge, None)
+                next_budget = downstream_budget(edge, budget)
             if not propagate or target in current["visited_refs"]:
                 continue
             state_key = traversal_state_identity(target, next_class, next_budget, path)
@@ -331,7 +331,7 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
         for crossing in item.get("trust_boundary_crossings") or []:
             all_crossings[(crossing["edge_id"], crossing["boundary_ref"])] = crossing
     crossings = sorted(all_crossings.values(), key=lambda x: (x["path_position"], x["edge_id"], x["boundary_ref"]))
-    return {"schema_version": "testamur.authority-reachability.v1", "starting_subject_ref": start, "compromise_model": model, "as_of": at.isoformat().replace("+00:00", "Z"), "reachable_subjects": reachable, "actionable_capabilities": actions, "actionable_by_target": by_target, "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossings), "trust_boundary_crossings": crossings, "expansions": expansions, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"reachable_does_not_mean_exercised": True, "network_reachability_does_not_mean_authorization": True, "credential_presence_does_not_mean_universal_acceptance": True, "resource_action_does_not_imply_resource_control": True, "constraints_fail_closed": True, "delegation_preserves_capability_budget": True, "authority_identities_are_exact_evidence": True}}
+    return {"schema_version": "testamur.authority-reachability.v1", "starting_subject_ref": start, "compromise_model": model, "as_of": at.isoformat().replace("+00:00", "Z"), "reachable_subjects": reachable, "actionable_capabilities": actions, "actionable_by_target": by_target, "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossings), "trust_boundary_crossings": crossings, "expansions": expansions, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"reachable_does_not_mean_exercised": True, "network_reachability_does_not_mean_authorization": True, "credential_presence_does_not_mean_universal_acceptance": True, "resource_action_does_not_imply_resource_control": True, "constraints_fail_closed": True, "delegation_preserves_capability_budget": True, "identity_hops_do_not_reset_delegated_capability_budget": True, "authority_identities_are_exact_evidence": True}}
 
 
 def authority_blast_radius(store: TestamurAuthorityStore, compromised_refs: str | Sequence[str], *, compromise_model: str | CompromiseModel, capability_filter: Iterable[tuple[str, str]] | None = None, max_depth: int = 8, max_paths: int = 256, expansion_budget: int = 10000, as_of: str | datetime | None = None) -> dict[str, Any]:
