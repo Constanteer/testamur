@@ -94,6 +94,8 @@ def credential_constraints_satisfied(
     edge. It never infers CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL. Claim aliases
     are alternate encodings, not additive grants: malformed or conflicting
     audience/scope/issuer/tenant evidence remains unresolved and fails closed.
+    Graph-bound constraints such as service_ref are deliberately left unresolved
+    for the exact-edge graph-context evaluator; they are never decorative metadata.
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
@@ -142,7 +144,6 @@ def credential_constraints_satisfied(
     handled: set[str] = {
         "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
         "approval_required", "human_confirmation_required", "mfa_required",
-        "service_ref",
     }
     for required_aliases, actual_aliases, label, require_subset in families:
         handled.update(required_aliases)
