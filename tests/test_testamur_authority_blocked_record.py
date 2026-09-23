@@ -79,6 +79,33 @@ def test_blocked_record_rejects_non_string_or_scalar_provenance(field, value):
         _record(**{field: value})
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("edge_id", 2),
+        ("source_ref", object()),
+        ("target_ref", ""),
+        ("relation_type", 7),
+        ("reachability_class", None),
+        ("evidence_state", " "),
+    ],
+)
+def test_blocked_record_rejects_coerced_or_empty_identity_fields(field, value):
+    with pytest.raises(ValueError, match="non-empty exact string ref"):
+        _record(**{field: value})
+
+
+def test_blocked_record_requires_terminal_edge_to_match_attempted_path():
+    with pytest.raises(ValueError, match="terminal edge"):
+        _record(edge_id="edge:other")
+
+
+@pytest.mark.parametrize("field", ["reasons", "unresolved_constraints"])
+def test_blocked_record_rejects_scalar_reason_collections(field):
+    with pytest.raises(ValueError, match="sequence of exact strings"):
+        _record(**{field: "not-a-sequence"})
+
+
 def test_blocked_record_rejects_non_mapping_crossing_without_coercion():
     with pytest.raises(ValueError, match="mapping records"):
         _record(trust_boundary_crossings=["boundary:prod"])
