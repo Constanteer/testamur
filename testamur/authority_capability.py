@@ -28,16 +28,17 @@ def _constraints(value: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _parse_time(value: Any) -> datetime | None:
-    if value is None:
+    """Parse exact serialized authority evidence; never stringify typed objects."""
+    if not isinstance(value, str):
         return None
-    text = str(value).strip()
+    text = value.strip()
     if not text:
         return None
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:
         parsed = datetime.fromisoformat(text)
-    except (TypeError, ValueError):
+    except ValueError:
         return None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
@@ -64,7 +65,7 @@ def _set(value: Any) -> set[str]:
 def _aliases_are_consistent(constraints: Mapping[str, Any], aliases: Sequence[str]) -> bool:
     """Aliases are alternate encodings of one observation, not independent grants.
 
-    If more than one alias is recorded they must describe the exact same set.  Unioning
+    If more than one alias is recorded they must describe the exact same set. Unioning
     conflicting scope/audience/service evidence would manufacture authority that no
     individual observation actually asserted.
     """
@@ -87,6 +88,10 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
     constraints = _constraints(capability)
     if "expires_at" in constraints and _parse_time(constraints.get("expires_at")) is None:
         return False
+    if "resource_pattern" in constraints:
+        pattern = constraints.get("resource_pattern")
+        if not isinstance(pattern, str) or not pattern.strip():
+            return False
     for key in ("approval_required", "human_confirmation_required", "mfa_required"):
         if key in constraints and not isinstance(constraints[key], bool):
             return False
@@ -152,10 +157,13 @@ def _repository_scope_is_attenuation(child_constraints: Mapping[str, Any], paren
 def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any]) -> bool:
     if not _well_formed(child) or not _well_formed(parent):
         return False
-    if str(child.get("namespace") or "") != str(parent.get("namespace") or "") or str(child.get("action") or "") != str(parent.get("action") or ""):
+    if child.get("namespace") != parent.get("namespace") or child.get("action") != parent.get("action"):
         return False
     pc, cc = _constraints(parent), _constraints(child)
-    if not _resource_within(None if child.get("resource") is None else str(child.get("resource")), None if parent.get("resource") is None else str(parent.get("resource")), None if pc.get("resource_pattern") is None else str(pc.get("resource_pattern"))):
+    child_resource = child.get("resource")
+    parent_resource = parent.get("resource")
+    parent_pattern = pc.get("resource_pattern")
+    if not _resource_within(child_resource, parent_resource, parent_pattern):
         return False
     if not _repository_scope_is_attenuation(cc, pc):
         return False
