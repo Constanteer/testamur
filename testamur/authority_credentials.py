@@ -93,9 +93,10 @@ def credential_constraints_satisfied(
     This only evaluates metadata on an already-explicit authority/acceptance
     edge. It never infers CAN_AUTHENTICATE_AS or ACCEPTS_CREDENTIAL. Claim aliases
     are alternate encodings, not additive grants: malformed or conflicting
-    audience/scope/issuer/tenant evidence remains unresolved and fails closed.
-    Graph-bound constraints such as service_ref are deliberately left unresolved
-    for the exact-edge graph-context evaluator; they are never decorative metadata.
+    audience/scope/issuer/tenant/resource-selection evidence remains unresolved
+    and fails closed. Graph-bound constraints such as service_ref are deliberately
+    left unresolved for the exact-edge graph-context evaluator; they are never
+    decorative metadata.
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
@@ -140,6 +141,11 @@ def credential_constraints_satisfied(
         (("scope", "scopes", "required_scope", "required_scopes"), ("scope", "scopes"), "scope", True),
         (("issuer", "issuers", "required_issuer", "required_issuers"), ("issuer", "issuers"), "issuer", False),
         (("tenant", "tenants", "tenant_id", "tenant_ids"), ("tenant", "tenants", "tenant_id", "tenant_ids"), "tenant", False),
+        # Connector installations commonly restrict a credential to an explicit
+        # resource selection. Treat these aliases as one exact claim family. The
+        # acceptance edge may require a subset, but it cannot add resources that
+        # the credential/installation did not explicitly select.
+        (("repository_selection", "required_repository_selection", "required_repositories"), ("repository_selection", "repositories", "repository_refs"), "repository_selection", True),
     )
     handled: set[str] = {
         "revoked", "revocation_state", "active", "expires_at", "not_before", "nbf",
