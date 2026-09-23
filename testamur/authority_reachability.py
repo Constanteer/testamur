@@ -63,15 +63,17 @@ def _exact_string_list(value: Any, *, field: str) -> list[str]:
 
 
 def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list[str]):
-    """Replay only canonical budget propagation for diagnostic attribution."""
+    """Replay canonical attenuation without allowing identity hops to reset delegation."""
     budget = None
     for edge_id in path_edge_ids[:-1]:
         edge = store.get_edge(edge_id)
         relation = exact_nonempty_string(edge.get("relation_type"), field="relation_type")
-        if relation == AuthorityRelationType.DELEGATES.value:
+        if relation in {
+            AuthorityRelationType.DELEGATES.value,
+            AuthorityRelationType.CAN_AUTHENTICATE_AS.value,
+            AuthorityRelationType.CAN_IMPERSONATE.value,
+        }:
             budget = downstream_budget(edge, budget)
-        elif relation in {AuthorityRelationType.CAN_AUTHENTICATE_AS.value, AuthorityRelationType.CAN_IMPERSONATE.value}:
-            budget = downstream_budget(edge, None)
     return budget
 
 
@@ -134,6 +136,7 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
     semantics["service_binding_is_exact_authority_evidence"] = True
     semantics["as_of_requires_explicit_timezone_when_supplied"] = True
     semantics["compromise_model_requires_exact_identity"] = True
+    semantics["diagnostic_replay_preserves_delegated_capability_budget"] = True
     enriched["semantics"] = semantics
     return enriched
 
