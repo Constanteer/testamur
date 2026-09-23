@@ -18,7 +18,7 @@ def test_impersonation_hop_cannot_reset_delegated_capability_budget(tmp_path):
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     _subject(store, "session", AuthoritySubjectKind.SESSION)
     _subject(store, "connector", AuthoritySubjectKind.CONNECTOR)
-    _subject(store, "principal", AuthoritySubjectKind.ACCOUNT)
+    _subject(store, "principal", AuthoritySubjectKind.PRINCIPAL)
     _subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
 
     allowed = _cap("repo.read")
@@ -40,7 +40,7 @@ def test_authentication_hop_cannot_reset_delegated_capability_budget(tmp_path):
     store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
     _subject(store, "session", AuthoritySubjectKind.SESSION)
     _subject(store, "token", AuthoritySubjectKind.TOKEN)
-    _subject(store, "account", AuthoritySubjectKind.ACCOUNT)
+    _subject(store, "account", AuthoritySubjectKind.PRINCIPAL)
     _subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
 
     allowed = _cap("repo.read")
