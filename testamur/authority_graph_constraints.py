@@ -25,6 +25,16 @@ def _claim_values(value: Any) -> tuple[set[str], bool]:
     return set(), False
 
 
+def _exact_diagnostic_values(values: Sequence[Any], *, field: str) -> set[str]:
+    """Preserve decision-bearing constraint diagnostics without coercion."""
+    result: set[str] = set()
+    for index, item in enumerate(values):
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{field}[{index}] must be an exact non-empty string")
+        result.add(item.strip())
+    return result
+
+
 def _aliased_values(container: Mapping[str, Any], keys: tuple[str, ...]) -> tuple[set[str], bool]:
     """Treat aliases as alternate encodings, never additive authority grants."""
     observed: list[set[str]] = []
@@ -68,7 +78,7 @@ def graph_context_constraints_satisfied(
     satisfied only by the exact target identity or explicit target service aliases;
     an adjacent service elsewhere in the graph is not evidence.
     """
-    remaining = {str(item) for item in unresolved}
+    remaining = _exact_diagnostic_values(unresolved, field="unresolved")
     reasons: set[str] = set()
     source = source_subject or {}
     target = target_subject or {}
@@ -139,11 +149,12 @@ def resolve_graph_context_verdict(
 ) -> tuple[bool, list[str], list[str]]:
     """Refine a metadata verdict using evidence from the exact traversed edge."""
     _credential_ok, credential_reasons, unresolved = credential_verdict
+    exact_credential_reasons = _exact_diagnostic_values(credential_reasons, field="credential_reasons")
     _graph_ok, graph_reasons, remaining = graph_context_constraints_satisfied(
         constraints, source_ref=source_ref, target_ref=target_ref,
         source_subject=source_subject, target_subject=target_subject, unresolved=unresolved,
     )
-    reasons = sorted({str(item) for item in credential_reasons} | set(graph_reasons))
+    reasons = sorted(exact_credential_reasons | set(graph_reasons))
     return not reasons and not remaining, reasons, remaining
 
 
