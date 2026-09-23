@@ -75,3 +75,27 @@ def test_equivalent_singular_and_plural_aliases_are_valid_encodings():
     assert ok
     assert reasons == []
     assert unresolved == []
+
+
+def test_expiry_does_not_stringify_non_string_temporal_evidence():
+    ok, reasons, unresolved = evaluate({}, {"expires_at": 20260923})
+    assert not ok
+    assert reasons == []
+    assert unresolved == ["expires_at"]
+
+
+def test_not_before_does_not_stringify_datetime_object():
+    ok, reasons, unresolved = evaluate(
+        {"not_before": datetime(2026, 9, 21, tzinfo=timezone.utc)},
+        {},
+    )
+    assert not ok
+    assert reasons == []
+    assert unresolved == ["not_before"]
+
+
+def test_revocation_state_does_not_stringify_typed_evidence():
+    ok, reasons, unresolved = evaluate({"revocation_state": 7}, {})
+    assert not ok
+    assert reasons == []
+    assert unresolved == ["revocation_state"]
