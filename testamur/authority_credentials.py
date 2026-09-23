@@ -170,7 +170,9 @@ def credential_constraints_satisfied(
         if key in handled:
             continue
         if value not in (None, False, "", [], {}, ()):
-            unresolved.add(str(key))
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("authority constraint keys must be exact non-empty strings")
+            unresolved.add(key.strip())
 
     return not reasons and not unresolved, sorted(reasons), sorted(unresolved)
 
