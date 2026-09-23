@@ -153,16 +153,26 @@ def evaluate_exact_edge_constraints(
     target_subject: Mapping[str, Any] | None = None,
     attribute_ref: str | None = None, as_of: Any = None,
 ) -> tuple[bool, list[str], list[str]]:
-    """Canonical two-stage constraint evaluation for one exact authority edge."""
+    """Canonical two-stage constraint evaluation for one exact authority edge.
+
+    CAN_AUTHENTICATE_AS.service_ref is intentionally evaluated by the reachability
+    engine against an explicit ACCEPTS_CREDENTIAL support edge. It is removed only
+    from this local target-binding stage so an account target is not mistaken for
+    the accepting service. Other relations must prove service_ref on their exact
+    target and fail closed otherwise.
+    """
     raw = edge.get("constraints")
     if raw is not None and not isinstance(raw, Mapping):
         return False, [], ["constraints"]
     constraints = dict(raw or {})
+    local_constraints = dict(constraints)
+    if edge.get("relation_type") == "CAN_AUTHENTICATE_AS" and "service_ref" in local_constraints:
+        local_constraints.pop("service_ref")
     source_ref = edge.get("source_ref") if isinstance(edge.get("source_ref"), str) else ""
     target_ref = edge.get("target_ref") if isinstance(edge.get("target_ref"), str) else ""
-    verdict = credential_constraints_satisfied(credential_attributes, constraints, as_of=as_of)
+    verdict = credential_constraints_satisfied(credential_attributes, local_constraints, as_of=as_of)
     return resolve_graph_context_verdict(
-        constraints, verdict, source_ref=source_ref, target_ref=target_ref,
+        local_constraints, verdict, source_ref=source_ref, target_ref=target_ref,
         source_subject=source_subject, target_subject=target_subject,
     )
 
