@@ -16,9 +16,22 @@ def test_integration_smoke_uses_current_discovery_surface() -> None:
     assert 'if method == "server/discover"' in mcp
 
 
+def test_integration_state_probe_reaches_read_only_tool_layer() -> None:
+    guidance = GUIDANCE.read_text(encoding="utf-8")
+    mcp = MCP.read_text(encoding="utf-8")
+
+    assert '"method":"tools/call"' in guidance
+    assert '"name":"testamur.project_supply_chain"' in guidance
+    assert "__testamur_diagnostic_missing_project__" in guidance
+    assert "database/open/schema error" in guidance
+    assert 'if method == "tools/call"' in mcp
+    assert 'if name == "testamur.project_supply_chain"' in mcp
+
+
 def test_integration_smoke_does_not_claim_evidence_semantics() -> None:
     guidance = GUIDANCE.read_text(encoding="utf-8")
 
     assert "does not verify any source or establish reliance" in guidance
     assert "does not infer" in guidance
     assert "verification, reliance, affectedness, validity, or trust" in guidance
+    assert "does not create a Project, fetch a Source, record reliance, or verify anything" in guidance
