@@ -55,3 +55,24 @@ def test_authentication_hop_cannot_reset_delegated_capability_budget(tmp_path):
 
     assert account["delegated_capability_budget"] == [allowed]
     assert actions == ["repo.read"]
+
+
+def test_blocked_diagnostic_replay_cannot_reset_budget_at_identity_hop(tmp_path):
+    store = TestamurAuthorityStore(tmp_path / "authority.sqlite3")
+    _subject(store, "session", AuthoritySubjectKind.SESSION)
+    _subject(store, "connector", AuthoritySubjectKind.CONNECTOR)
+    _subject(store, "principal", AuthoritySubjectKind.PRINCIPAL)
+    _subject(store, "repo", AuthoritySubjectKind.REPOSITORY)
+
+    allowed = _cap("repo.read")
+    forbidden = _cap("repo.admin")
+    store.record_edge("session", AuthorityRelationType.DELEGATES, "connector", capabilities=[allowed], evidence=OBSERVED)
+    store.record_edge("connector", AuthorityRelationType.CAN_IMPERSONATE, "principal", evidence=OBSERVED)
+    store.record_edge("principal", AuthorityRelationType.HAS_CAPABILITY, "repo", capabilities=[forbidden], evidence=OBSERVED)
+
+    result = authority_reachability(store, "session", compromise_model=CompromiseModel.ACCOUNT_SESSION_TAKEOVER)
+    blocked = next(item for item in result["blocked_transitions"] if item["target_ref"] == "repo")
+
+    assert blocked["inherited_capability_budget"] == [allowed]
+    assert blocked["candidate_capabilities"] == [forbidden]
+    assert result["semantics"]["diagnostic_replay_preserves_delegated_capability_budget"] is True
