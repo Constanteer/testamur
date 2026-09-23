@@ -6,7 +6,9 @@ from enum import StrEnum
 from typing import Any, Iterable, Mapping, Sequence
 
 from .authority import AuthorityRelationType, AuthoritySubjectKind, TestamurAuthorityStore
+from .authority_blocked import blocked_transition_record
 from .authority_boundaries import boundary_refs_from_crossings, project_trust_boundary_crossings
+from .authority_filter import normalize_capability_filter
 from .authority_graph_constraints import evaluate_exact_edge_constraints
 from .authority_projection import capability_identity
 from .authority_reachability_policy import (
@@ -154,7 +156,8 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
     model = _normalize_model(compromise_model)
     allowed = _MODEL_RELATIONS[model]
     at = _as_of(as_of)
-    filters = None if capability_filter is None else {(str(n), str(a)) for n, a in capability_filter}
+    normalized_filter = normalize_capability_filter(capability_filter)
+    filters = None if normalized_filter is None else set(normalized_filter)
     queue = deque([{"subject_ref": start, "depth": 0, "edge_ids": [], "supporting_edge_ids": [], "visited_refs": (start,), "budget": None, "declared": False, "class": AuthorityReachabilityClass.CONTROLLED.value}])
     reachable = [{"subject_ref": start, "kind": _kind(store, start), "reachability_class": AuthorityReachabilityClass.CONTROLLED.value, "depth": 0, "path_edge_ids": [], "supporting_edge_ids": [], "boundary_refs": [], "trust_boundary_crossings": [], "evidence_state": "SEED_ASSUMPTION", "delegated_capability_budget": None}]
     actions: list[dict[str, Any]] = []
@@ -194,7 +197,14 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
             boundary_refs = boundary_refs_from_crossings(crossings)
             if not ok:
                 gates = {"approval_required", "human_confirmation_required", "mfa_required"}
-                blocked.append({"edge_id": edge_id, "source_ref": source, "target_ref": target, "relation_type": relation, "path_edge_ids": path, "supporting_edge_ids": supporting, "reasons": reasons, "unresolved_constraints": unresolved, "reachability_class": AuthorityReachabilityClass.CONDITIONALLY_ACTIONABLE.value if reasons and set(reasons) <= gates else AuthorityReachabilityClass.BLOCKED.value, "evidence_state": _evidence_state(declared)})
+                blocked.append(blocked_transition_record(
+                    edge_id=edge_id, source_ref=source, target_ref=target, relation_type=relation,
+                    path_edge_ids=path, supporting_edge_ids=supporting, reasons=reasons,
+                    unresolved_constraints=unresolved,
+                    reachability_class=AuthorityReachabilityClass.CONDITIONALLY_ACTIONABLE.value if reasons and set(reasons) <= gates else AuthorityReachabilityClass.BLOCKED.value,
+                    evidence_state=_evidence_state(declared), boundary_refs=boundary_refs,
+                    trust_boundary_crossings=crossings,
+                ))
                 continue
 
             budget = current["budget"]
@@ -203,7 +213,14 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
                 capabilities = [c for c in capabilities if (str(c.get("namespace") or ""), str(c.get("action") or "")) in filters]
             if relation in _ACTION_RELATIONS:
                 if relation == AuthorityRelationType.HAS_CAPABILITY.value and not capabilities:
-                    blocked.append({"edge_id": edge_id, "source_ref": source, "target_ref": target, "relation_type": relation, "path_edge_ids": path, "supporting_edge_ids": supporting, "reasons": ["missing_explicit_or_authorized_capability"], "unresolved_constraints": [], "reachability_class": AuthorityReachabilityClass.UNKNOWN.value, "evidence_state": _evidence_state(declared)})
+                    blocked.append(blocked_transition_record(
+                        edge_id=edge_id, source_ref=source, target_ref=target, relation_type=relation,
+                        path_edge_ids=path, supporting_edge_ids=supporting,
+                        reasons=["missing_explicit_or_authorized_capability"], unresolved_constraints=[],
+                        reachability_class=AuthorityReachabilityClass.UNKNOWN.value,
+                        evidence_state=_evidence_state(declared), boundary_refs=boundary_refs,
+                        trust_boundary_crossings=crossings,
+                    ))
                 for capability in capabilities:
                     key = action_result_identity(target, capability, path)
                     if key in seen: continue
@@ -225,7 +242,14 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
             elif relation == AuthorityRelationType.DELEGATES.value:
                 next_budget = downstream_budget(edge, budget)
                 if next_budget == ():
-                    blocked.append({"edge_id": edge_id, "source_ref": source, "target_ref": target, "relation_type": relation, "path_edge_ids": path, "supporting_edge_ids": supporting, "reasons": ["missing_or_empty_delegated_capability_set"], "unresolved_constraints": [], "reachability_class": AuthorityReachabilityClass.UNKNOWN.value, "evidence_state": _evidence_state(declared)})
+                    blocked.append(blocked_transition_record(
+                        edge_id=edge_id, source_ref=source, target_ref=target, relation_type=relation,
+                        path_edge_ids=path, supporting_edge_ids=supporting,
+                        reasons=["missing_or_empty_delegated_capability_set"], unresolved_constraints=[],
+                        reachability_class=AuthorityReachabilityClass.UNKNOWN.value,
+                        evidence_state=_evidence_state(declared), boundary_refs=boundary_refs,
+                        trust_boundary_crossings=crossings,
+                    ))
                     propagate = False
             elif relation in {AuthorityRelationType.CAN_AUTHENTICATE_AS.value, AuthorityRelationType.CAN_IMPERSONATE.value}:
                 next_budget = downstream_budget(edge, None)
