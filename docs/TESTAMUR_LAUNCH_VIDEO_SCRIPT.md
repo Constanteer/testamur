@@ -64,13 +64,17 @@ The walkthrough deliberately uses the product vocabulary already exposed by Test
 
 ## 3:15–3:55 — Revalidation closes the loop
 
-**Screen:** Open Revalidation for the affected revision/context and show the available check path.
+**Screen:** Open Revalidation from the selected advisory/dependency context. Keep the visible Project, dependency/component, and before → after revision pair on screen; then return to the originating Project after recording the scoped check.
 
 **Voice:**
 
-> Revalidation is the operational end of the loop. A changed or stale dependency tells you where another check may be warranted. Run the scoped check, preserve its result, and keep the earlier record rather than rewriting history.
+> Revalidation is the operational end of the loop. The selected dependency and before-to-after revision pair remain visible so you can see the prior basis for this check instead of treating it as an isolated verdict. A changed or stale dependency tells you where another check may be warranted; it does not establish invalidity, affectedness, or reliance.
 
-> The result is a chain you can inspect later: source, revision, comparison, impact, and the check that followed.
+> Record the scoped check and preserve its result alongside the earlier record rather than rewriting history. Then return to the Project and continue with another binding or advisory candidate. Completing this one revalidation does not verify the whole Project.
+
+> The result is an auditable chain you can inspect later: source, revision, selected comparison, explicit impact/reliance evidence, and the scoped check that followed.
+
+**On-screen callout:** `scoped revalidation ≠ project-wide verification`
 
 ## 3:55–4:25 — Agents and integrations
 
@@ -96,9 +100,12 @@ The walkthrough deliberately uses the product vocabulary already exposed by Test
 
 - Use the demo/example Project so the walkthrough is reproducible without private data.
 - Keep browser zoom large enough that revision IDs, state badges, and next-step links remain readable at 1080p.
+- During Compare → Impact → Revalidation, keep the selected dependency/component and before → after pair visible; do not silently switch scope between stages.
+- After Revalidation, return to the originating Project and show that other bindings/candidates remain reviewable.
 - Do not describe a recorded item as verified unless a specific verification record supports that statement.
 - Do not describe a fetched item as relied on unless a reliance relation exists.
 - Do not describe a changed revision as invalid or a stale result as false.
 - Do not describe advisory identity overlap as affectedness.
+- Do not describe a completed scoped revalidation as project-wide verification.
 - Do not describe model exposure as reliance.
 - If a live hosted surface is temporarily unavailable, cut to a pre-recorded capture rather than changing the semantic explanation to fit an error state.
