@@ -12,8 +12,8 @@ class ExactAuthorityStoreView:
     The raw traversal engine historically normalizes several identity-bearing fields
     with ``str(...)``. This view validates records *before* they reach that code so
     malformed typed evidence cannot become a subject, edge, relation, service,
-    credential identity, subject kind, or provenance class merely because it is
-    connected in the graph.
+    credential identity, trust-boundary annotation, subject kind, or provenance
+    class merely because it is connected in the graph.
 
     This is deliberately not a material-lineage adapter: it only preserves and
     validates authority records already returned by the authority store.
@@ -32,6 +32,16 @@ class ExactAuthorityStoreView:
             raise ValueError("authority edge constraints must be a mapping when present")
         if isinstance(constraints, Mapping) and "service_ref" in constraints:
             exact_optional_constraint_ref(constraints.get("service_ref"), field="constraints.service_ref")
+
+        boundary_refs = edge.get("boundary_refs")
+        if boundary_refs is not None:
+            if isinstance(boundary_refs, (str, bytes, bytearray)) or not isinstance(boundary_refs, (list, tuple)):
+                raise ValueError("authority edge boundary_refs must be a sequence of exact refs when present")
+            for index, boundary_ref in enumerate(boundary_refs):
+                exact_optional_constraint_ref(
+                    boundary_ref,
+                    field=f"authority edge boundary_refs[{index}]",
+                )
 
         evidence = edge.get("evidence")
         if evidence is not None:
