@@ -54,11 +54,11 @@ def test_explicit_target_service_alias_can_prove_binding_without_graph_search():
     assert unresolved == []
 
 
-def test_malformed_or_conflicting_service_aliases_fail_closed():
+def test_malformed_service_evidence_fails_closed_without_stringification():
     ok, reasons, unresolved = evaluate_exact_edge_constraints(
         edge(target="connector-account:github"),
         credential_attributes={},
-        target_subject={"service_ref": "svc:github", "attributes": {"service_ref": "svc:other"}},
+        target_subject={"attributes": {"service_ref": 123}},
         as_of=NOW,
     )
     assert not ok
