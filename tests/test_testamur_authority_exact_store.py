@@ -6,8 +6,9 @@ from testamur.authority_exact_store import ExactAuthorityStoreView
 
 
 class _Store:
-    def __init__(self, edge):
+    def __init__(self, edge, subject=None):
         self.edge = edge
+        self.subject = subject
 
     def edges_from(self, source_ref):
         return [self.edge]
@@ -17,6 +18,12 @@ class _Store:
 
     def get_edge(self, edge_id):
         return self.edge
+
+    def maybe_subject(self, subject_ref):
+        return self.subject
+
+    def get_subject(self, subject_ref):
+        return self.subject
 
 
 def _edge(**overrides):
@@ -63,3 +70,36 @@ def test_exact_store_rejects_malformed_acceptance_candidate_before_lookup_result
     view = ExactAuthorityStoreView(_Store(edge))
     with pytest.raises(ValueError):
         view.list_edges(source_ref="service:github", target_ref="credential:one")
+
+
+def test_exact_store_rejects_typed_subject_kind_before_credential_classification():
+    subject = {"subject_ref": "credential:one", "kind": {"value": "TOKEN"}, "attributes": {}}
+    view = ExactAuthorityStoreView(_Store(_edge(), subject=subject))
+    with pytest.raises(ValueError):
+        view.maybe_subject("credential:one")
+
+
+def test_exact_store_rejects_non_mapping_subject_attributes():
+    subject = {"subject_ref": "credential:one", "kind": "TOKEN", "attributes": ["scope:repo"]}
+    view = ExactAuthorityStoreView(_Store(_edge(), subject=subject))
+    with pytest.raises(ValueError):
+        view.maybe_subject("credential:one")
+
+
+def test_exact_store_rejects_typed_declared_evidence_class_before_projection():
+    edge = _edge(evidence=[{"evidence_class": {"name": "DECLARED"}}])
+    view = ExactAuthorityStoreView(_Store(edge))
+    with pytest.raises(ValueError):
+        view.edges_from("connector:one")
+
+
+def test_exact_store_rejects_scalar_evidence_container():
+    view = ExactAuthorityStoreView(_Store(_edge(evidence="DECLARED")))
+    with pytest.raises(ValueError):
+        view.edges_from("connector:one")
+
+
+def test_exact_store_rejects_typed_lookup_refs_before_connectivity_can_be_queried():
+    view = ExactAuthorityStoreView(_Store(_edge()))
+    with pytest.raises(ValueError):
+        view.list_edges(source_ref={"ref": "service:github"}, target_ref="credential:one")
