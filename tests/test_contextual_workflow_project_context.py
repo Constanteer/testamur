@@ -18,6 +18,14 @@ def test_contextual_workflow_preserves_project_context_across_stages() -> None:
     assert "return suffix ? `${base}?${suffix}` : base;" in source
 
 
+def test_contextual_workflow_surfaces_review_context() -> None:
+    source = _source()
+
+    assert "function reviewContextLabel(objectRef)" in source
+    assert "`Reviewing ${objectRef}${projectPart}`" in source
+    assert "esc(reviewContextLabel(objectRef))" in source
+
+
 def test_revalidation_return_uses_originating_project() -> None:
     source = _source()
 
