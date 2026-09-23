@@ -39,8 +39,10 @@ def _edge(**overrides):
 
 
 def test_exact_store_preserves_valid_authority_edge():
-    view = ExactAuthorityStoreView(_Store(_edge()))
-    assert view.edges_from("connector:one")[0]["target_ref"] == "service:github"
+    view = ExactAuthorityStoreView(_Store(_edge(boundary_refs=["boundary:tenant"])))
+    edge = view.edges_from("connector:one")[0]
+    assert edge["target_ref"] == "service:github"
+    assert edge["boundary_refs"] == ["boundary:tenant"]
 
 
 @pytest.mark.parametrize(
@@ -95,6 +97,21 @@ def test_exact_store_rejects_typed_declared_evidence_class_before_projection():
 
 def test_exact_store_rejects_scalar_evidence_container():
     view = ExactAuthorityStoreView(_Store(_edge(evidence="DECLARED")))
+    with pytest.raises(ValueError):
+        view.edges_from("connector:one")
+
+
+@pytest.mark.parametrize(
+    "boundary_refs",
+    [
+        "boundary:tenant",
+        [{"ref": "boundary:tenant", "connected": True}],
+        [7],
+        [""],
+    ],
+)
+def test_exact_store_rejects_non_exact_trust_boundary_evidence(boundary_refs):
+    view = ExactAuthorityStoreView(_Store(_edge(boundary_refs=boundary_refs)))
     with pytest.raises(ValueError):
         view.edges_from("connector:one")
 
