@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .authority import AuthorityRelationType, TestamurAuthorityStore
+from .authority_exact_store import ExactAuthorityStoreView
 from .authority_filter import normalize_capability_filter
 from .authority_reachability_policy import capability_rejection_diagnostics, downstream_budget
 from .authority_reachability_v2 import (
@@ -78,9 +79,6 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
     for raw in result.get("blocked_transitions") or []:
         item = dict(raw)
         path = _exact_string_list(item.get("path_edge_ids"), field="blocked.path_edge_ids")
-
-        # v2 is the authority for attempted-path provenance. The canonical facade
-        # preserves it; it must never reconstruct a boundary from graph connectivity.
         if "boundary_refs" not in item or "trust_boundary_crossings" not in item:
             raise ValueError("raw blocked transition is missing exact trust-boundary evidence")
         boundary_refs = _exact_string_list(item.get("boundary_refs"), field="blocked.boundary_refs")
@@ -130,6 +128,8 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
     semantics["blocked_transition_does_not_grant_authority"] = True
     semantics["capability_filter_is_selector_not_authority_evidence"] = True
     semantics["compromise_seeds_are_explicit_authority_assumptions"] = True
+    semantics["traversed_authority_edges_require_exact_identity_evidence"] = True
+    semantics["service_binding_is_exact_authority_evidence"] = True
     enriched["semantics"] = semantics
     return enriched
 
@@ -143,12 +143,14 @@ def _canonical_kwargs(kwargs: Mapping[str, Any]) -> dict[str, Any]:
 
 def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: str, *args, **kwargs):
     start = exact_subject_ref(starting_subject_ref, field="starting_subject_ref")
-    return _enrich_blocked(store, _authority_reachability(store, start, *args, **_canonical_kwargs(kwargs)))
+    exact_store = ExactAuthorityStoreView(store)
+    return _enrich_blocked(exact_store, _authority_reachability(exact_store, start, *args, **_canonical_kwargs(kwargs)))
 
 
 def authority_blast_radius(store: TestamurAuthorityStore, compromised_refs, *args, **kwargs):
     seeds = normalize_compromise_seeds(compromised_refs)
-    return _enrich_blocked(store, _authority_blast_radius(store, seeds, *args, **_canonical_kwargs(kwargs)))
+    exact_store = ExactAuthorityStoreView(store)
+    return _enrich_blocked(exact_store, _authority_blast_radius(exact_store, seeds, *args, **_canonical_kwargs(kwargs)))
 
 
 __all__ = ["CompromiseModel", "AuthorityReachabilityClass", "authority_reachability", "authority_blast_radius"]
