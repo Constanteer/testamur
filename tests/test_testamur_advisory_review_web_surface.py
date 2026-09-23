@@ -22,6 +22,7 @@ def test_advisory_review_surface_uses_canonical_projection_without_score():
     assert "score =" not in source
     assert "candidate_status === 'affected'" not in source
 
+
 def test_advisory_review_surface_records_evidence_not_verdicts():
     source = (WEB / "advisory-review-ui.js").read_text(encoding="utf-8")
     assert "/v1/advisory-assessments" in source
@@ -37,3 +38,11 @@ def test_advisory_review_surface_records_evidence_not_verdicts():
     assert "payload.verdict" not in source
     assert "payload.trust_score" not in source
 
+
+def test_advisory_review_observer_ignores_its_own_surface_mutations():
+    source = (WEB / "advisory-review-ui.js").read_text(encoding="utf-8")
+    assert "data-advisory-review-state" in source
+    assert "MutationObserver(queueRender)" not in source
+    assert "MutationObserver(records" in source
+    assert "records.every" in source
+    assert "queueRender()" in source
