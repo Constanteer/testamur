@@ -19,6 +19,7 @@ from .authority_reachability_v2 import (
     authority_blast_radius as _authority_blast_radius,
     authority_reachability as _authority_reachability,
 )
+from .authority_seed import exact_subject_ref, normalize_compromise_seeds
 
 
 _CAPABILITY_REASON_MARKERS = ("capability", "delegation", "scope", "audience", "resource")
@@ -128,6 +129,7 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
     semantics["blocked_boundary_evidence_uses_exact_recorded_path_only"] = True
     semantics["blocked_transition_does_not_grant_authority"] = True
     semantics["capability_filter_is_selector_not_authority_evidence"] = True
+    semantics["compromise_seeds_are_explicit_authority_assumptions"] = True
     enriched["semantics"] = semantics
     return enriched
 
@@ -139,12 +141,14 @@ def _canonical_kwargs(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     return canonical
 
 
-def authority_reachability(store: TestamurAuthorityStore, *args, **kwargs):
-    return _enrich_blocked(store, _authority_reachability(store, *args, **_canonical_kwargs(kwargs)))
+def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: str, *args, **kwargs):
+    start = exact_subject_ref(starting_subject_ref, field="starting_subject_ref")
+    return _enrich_blocked(store, _authority_reachability(store, start, *args, **_canonical_kwargs(kwargs)))
 
 
-def authority_blast_radius(store: TestamurAuthorityStore, *args, **kwargs):
-    return _enrich_blocked(store, _authority_blast_radius(store, *args, **_canonical_kwargs(kwargs)))
+def authority_blast_radius(store: TestamurAuthorityStore, compromised_refs, *args, **kwargs):
+    seeds = normalize_compromise_seeds(compromised_refs)
+    return _enrich_blocked(store, _authority_blast_radius(store, seeds, *args, **_canonical_kwargs(kwargs)))
 
 
 __all__ = ["CompromiseModel", "AuthorityReachabilityClass", "authority_reachability", "authority_blast_radius"]
