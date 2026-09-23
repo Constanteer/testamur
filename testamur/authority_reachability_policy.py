@@ -4,7 +4,6 @@ import fnmatch
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from .authority import AuthorityRelationType
 from .authority_capability import (
     CapabilityBudget,
     capability_allowed,
@@ -12,14 +11,8 @@ from .authority_capability import (
     edge_capabilities,
     project_budget,
 )
-from .authority_projection import capability_identity, projected_budget_identity
-
-
-_IMPLICIT_ACTIONS = {
-    AuthorityRelationType.CAN_READ.value: "read",
-    AuthorityRelationType.CAN_WRITE.value: "write",
-    AuthorityRelationType.CAN_EXECUTE.value: "execute",
-}
+from .authority_exact import exact_implicit_capability
+from .authority_identity import exact_action_result_identity, exact_traversal_state_identity
 
 _CONSTRAINT_SETS = (
     (("scope", "scopes", "required_scope", "required_scopes"), "scope"),
@@ -38,21 +31,12 @@ _REPOSITORY_KEYS = {"repository_selection", "repository_ref", "repository_refs"}
 
 
 def implicit_capability(edge: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Return an action implied by an authority relation itself.
+    """Return an action implied by exact authority-edge evidence only.
 
-    CAN_CONNECT is deliberately absent: network/service connectivity is not
-    authorization and must never manufacture a capability during traversal.
+    The canonical projector deliberately excludes CAN_CONNECT and rejects malformed
+    relation/target identities rather than stringifying them into authority.
     """
-    action = _IMPLICIT_ACTIONS.get(str(edge.get("relation_type") or ""))
-    target_ref = str(edge.get("target_ref") or "").strip()
-    if action is None or not target_ref:
-        return None
-    return {
-        "namespace": "testamur",
-        "action": action,
-        "resource": target_ref,
-        "constraints": {},
-    }
+    return exact_implicit_capability(edge)
 
 
 def exercisable_capabilities(
@@ -70,12 +54,6 @@ def exercisable_capabilities(
 def _constraint_set(
     constraints: Mapping[str, Any], singular: str, *plural: str
 ) -> tuple[set[str], bool]:
-    """Return exact string constraint evidence plus whether malformed evidence exists.
-
-    This helper is diagnostic only.  It deliberately does not stringify typed
-    values: a Product/CLI/Web explanation must not make malformed evidence look
-    like a valid scope, audience, service, tenant, or other authority constraint.
-    """
     result: set[str] = set()
     malformed = False
     for key in (singular, *plural):
@@ -103,7 +81,6 @@ def _constraint_set(
 
 
 def _parse_time(value: Any) -> datetime | None:
-    """Parse exact timestamp evidence without coercion or naive-time assumptions."""
     if not isinstance(value, str):
         return None
     text = value.strip()
@@ -121,12 +98,6 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any]) -> tuple[set[str], set[str], set[str]]:
-    """Attribute a rejected attenuation without making an independent auth decision.
-
-    The caller invokes this only after canonical ``capability_allowed`` rejected the
-    candidate. These labels explain which parent constraints were not preserved;
-    they never turn a candidate into authority.
-    """
     reasons: set[str] = set()
     failed: set[str] = set()
     unresolved: set[str] = set()
@@ -222,13 +193,6 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
 def capability_rejection_diagnostics(
     edge: Mapping[str, Any], inherited: CapabilityBudget | None
 ) -> dict[str, Any] | None:
-    """Explain why explicit edge capabilities do not fit inherited authority.
-
-    This is diagnostic only: it calls the same canonical ``capability_allowed``
-    predicate used by traversal and never turns a mismatch into authority. Exact
-    candidate and inherited budgets are returned so Product/CLI/Web can explain a
-    denial without reconstructing permissions from graph connectivity.
-    """
     candidates = [dict(item) for item in edge.get("capabilities") or [] if isinstance(item, Mapping)]
     if not candidates or inherited is None:
         return None
@@ -281,18 +245,11 @@ def capability_rejection_diagnostics(
     }
 
 
-def downstream_budget(
-    edge: Mapping[str, Any],
-    inherited: CapabilityBudget | None,
-) -> CapabilityBudget | None:
-    """Compute the exact capability budget propagated by this edge."""
+def downstream_budget(edge: Mapping[str, Any], inherited: CapabilityBudget | None) -> CapabilityBudget | None:
     return delegation_budget(edge, inherited)
 
 
-def project_downstream_budget(
-    budget: CapabilityBudget | None,
-) -> list[dict[str, Any]] | None:
-    """Product/CLI projection that preserves every authority constraint."""
+def project_downstream_budget(budget: CapabilityBudget | None) -> list[dict[str, Any]] | None:
     return project_budget(budget)
 
 
@@ -301,12 +258,8 @@ def action_result_identity(
     capability: Mapping[str, Any],
     path_edge_ids: Sequence[str],
 ) -> tuple[str, str, tuple[str, ...]]:
-    """Identity for an actionable result without collapsing constrained authority."""
-    return (
-        str(target_ref),
-        capability_identity(capability),
-        tuple(str(edge_id) for edge_id in path_edge_ids),
-    )
+    """Canonical actionable-result identity; malformed refs fail closed."""
+    return exact_action_result_identity(target_ref, capability, path_edge_ids)
 
 
 def traversal_state_identity(
@@ -315,13 +268,8 @@ def traversal_state_identity(
     budget: CapabilityBudget | None,
     path_edge_ids: Sequence[str],
 ) -> tuple[str, str, tuple[str, ...] | None, tuple[str, ...]]:
-    """Identity for a traversal state including the exact inherited authority budget."""
-    return (
-        str(subject_ref),
-        str(reachability_class),
-        projected_budget_identity(budget),
-        tuple(str(edge_id) for edge_id in path_edge_ids),
-    )
+    """Canonical traversal identity; malformed refs fail closed."""
+    return exact_traversal_state_identity(subject_ref, reachability_class, budget, path_edge_ids)
 
 
 __all__ = [
