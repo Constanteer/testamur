@@ -8,9 +8,11 @@ blocked results with denial diagnostics derived from the exact traversed path.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from .authority import AuthorityRelationType, TestamurAuthorityStore
+from .authority_edge_identity import exact_nonempty_string
 from .authority_exact_store import ExactAuthorityStoreView
 from .authority_filter import normalize_capability_filter
 from .authority_reachability_policy import capability_rejection_diagnostics, downstream_budget
@@ -65,7 +67,7 @@ def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list
     budget = None
     for edge_id in path_edge_ids[:-1]:
         edge = store.get_edge(edge_id)
-        relation = str(edge.get("relation_type") or "")
+        relation = exact_nonempty_string(edge.get("relation_type"), field="relation_type")
         if relation == AuthorityRelationType.DELEGATES.value:
             budget = downstream_budget(edge, budget)
         elif relation in {AuthorityRelationType.CAN_AUTHENTICATE_AS.value, AuthorityRelationType.CAN_IMPERSONATE.value}:
@@ -100,7 +102,7 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
             if not isinstance(boundary_ref, str) or not boundary_ref.strip():
                 raise ValueError("blocked trust-boundary crossing boundary_ref must be an exact string")
             crossings.append(crossing_item)
-        proven_boundaries = sorted({str(crossing["boundary_ref"]) for crossing in crossings})
+        proven_boundaries = sorted({crossing["boundary_ref"] for crossing in crossings})
         if sorted(set(boundary_refs)) != proven_boundaries:
             raise ValueError("blocked boundary_refs must equal boundaries proven by exact crossings")
         item["boundary_refs"] = boundary_refs
@@ -130,14 +132,52 @@ def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) ->
     semantics["compromise_seeds_are_explicit_authority_assumptions"] = True
     semantics["traversed_authority_edges_require_exact_identity_evidence"] = True
     semantics["service_binding_is_exact_authority_evidence"] = True
+    semantics["as_of_requires_explicit_timezone_when_supplied"] = True
+    semantics["compromise_model_requires_exact_identity"] = True
     enriched["semantics"] = semantics
     return enriched
+
+
+def _canonical_as_of(value: Any) -> datetime | None:
+    """Normalize explicit temporal evidence without guessing a timezone or coercing types."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("as_of datetime must include an explicit timezone")
+        return value.astimezone(timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("as_of must be an exact timezone-aware ISO timestamp string or datetime")
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError("as_of must be a valid timezone-aware ISO timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("as_of timestamp must include an explicit timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def _canonical_compromise_model(value: Any) -> str:
+    """Accept only an exact declared compromise model; arbitrary objects are not identities."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("compromise_model must be an exact non-empty string")
+    try:
+        return CompromiseModel(value.strip()).value
+    except ValueError as exc:
+        raise ValueError(f"unsupported compromise model {value!r}") from exc
 
 
 def _canonical_kwargs(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     canonical = dict(kwargs)
     if "capability_filter" in canonical:
         canonical["capability_filter"] = normalize_capability_filter(canonical["capability_filter"])
+    if "as_of" in canonical:
+        canonical["as_of"] = _canonical_as_of(canonical["as_of"])
+    if "compromise_model" in canonical:
+        canonical["compromise_model"] = _canonical_compromise_model(canonical["compromise_model"])
     return canonical
 
 
