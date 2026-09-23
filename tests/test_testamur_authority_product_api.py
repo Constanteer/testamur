@@ -31,11 +31,20 @@ def _reach_result():
                 "target_ref": "service:github",
                 "relation_type": "CAN_AUTHENTICATE_AS",
                 "reasons": ["audience_mismatch"],
+                "reason_groups": {"credential_or_token": ["audience_mismatch"]},
                 "unresolved_constraints": ["device_binding"],
+                "inherited_capability_budget": [
+                    {"namespace": "github", "action": "read", "resource": "repo:testamur"}
+                ],
+                "candidate_capabilities": [
+                    {"namespace": "github", "action": "write", "resource": "repo:testamur"}
+                ],
                 "path_edge_ids": ["edge:owns"],
                 "supporting_edge_ids": ["edge:accepts"],
+                "boundary_refs": ["boundary:github"],
             }
         ],
+        "trust_boundary_refs": ["boundary:github"],
         "trust_boundary_crossings": [],
         "truncated": False,
         "truncation_reasons": [],
@@ -63,6 +72,20 @@ def test_product_envelope_projects_exact_authority_result_without_collapsing_con
     assert blocked["reasons"] == ["audience_mismatch"]
     assert blocked["unresolved_constraints"] == ["device_binding"]
 
+    decision = projected["decision"]
+    assert decision["schema_version"] == "testamur.authority-decision-projection.v1"
+    blocked_decision = decision["blocked"][0]
+    assert blocked_decision["supporting_edge_ids"] == ["edge:accepts"]
+    assert blocked_decision["inherited_capability_budget"] == [
+        {"namespace": "github", "action": "read", "resource": "repo:testamur"}
+    ]
+    assert blocked_decision["candidate_capabilities"] == [
+        {"namespace": "github", "action": "write", "resource": "repo:testamur"}
+    ]
+    assert blocked_decision["boundary_refs"] == ["boundary:github"]
+    assert projected["semantics"]["decision_projection_is_not_authority_evidence"] is True
+    assert projected["semantics"]["supporting_acceptance_edges_do_not_expand_authority"] is True
+
 
 def test_product_envelope_preserves_error_without_inventing_authority():
     error = {
@@ -76,6 +99,13 @@ def test_product_envelope_rejects_non_authority_product_schema():
     with pytest.raises(ValueError, match="unsupported product authority schema"):
         project_product_authority_envelope(
             {"ok": True, "schema": "testamur.product.impact.v1", "result": _reach_result()}
+        )
+
+
+def test_product_envelope_rejects_typed_schema_instead_of_stringifying_it():
+    with pytest.raises(ValueError, match="schema must be an exact non-empty string"):
+        project_product_authority_envelope(
+            {"ok": True, "schema": {"name": "testamur.product.authority-reachability.v1"}, "result": _reach_result()}
         )
 
 
