@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .authority import AuthorityRelationType, TestamurAuthorityStore
-from .authority_boundaries import boundary_refs_from_crossings, project_trust_boundary_crossings
 from .authority_filter import normalize_capability_filter
 from .authority_reachability_policy import capability_rejection_diagnostics, downstream_budget
 from .authority_reachability_v2 import (
@@ -45,6 +44,20 @@ def _reason_groups(reasons: list[str]) -> dict[str, list[str]]:
     return groups
 
 
+def _exact_string_list(value: Any, *, field: str) -> list[str]:
+    """Preserve engine evidence without coercing arbitrary values into identities."""
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ValueError(f"{field} must be a sequence of exact strings")
+    result: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError(f"{field} entries must be non-empty exact strings")
+        result.append(entry)
+    return result
+
+
 def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list[str]):
     """Replay only canonical budget propagation for diagnostic attribution."""
     budget = None
@@ -58,46 +71,60 @@ def _budget_before_final_edge(store: TestamurAuthorityStore, path_edge_ids: list
     return budget
 
 
-def _blocked_boundary_evidence(store: TestamurAuthorityStore, path_edge_ids: list[str]) -> tuple[list[str], list[dict[str, Any]]]:
-    """Project boundary evidence from the exact rejected authority path only."""
-    if not path_edge_ids:
-        return [], []
-    crossings = project_trust_boundary_crossings(store, path_edge_ids)
-    return boundary_refs_from_crossings(crossings), crossings
-
-
 def _enrich_blocked(store: TestamurAuthorityStore, result: Mapping[str, Any]) -> dict[str, Any]:
     enriched = dict(result)
     blocked: list[dict[str, Any]] = []
     for raw in result.get("blocked_transitions") or []:
         item = dict(raw)
-        path = [str(value) for value in item.get("path_edge_ids") or [] if str(value)]
-        # Prefer engine-recorded exact evidence once v2 emits it. Until then the
-        # compatibility fallback replays only the already-recorded attempted path.
-        if "boundary_refs" in item and "trust_boundary_crossings" in item:
-            boundary_refs = list(item.get("boundary_refs") or [])
-            crossings = list(item.get("trust_boundary_crossings") or [])
-        else:
-            boundary_refs, crossings = _blocked_boundary_evidence(store, path)
+        path = _exact_string_list(item.get("path_edge_ids"), field="blocked.path_edge_ids")
+
+        # v2 is the authority for attempted-path provenance. The canonical facade
+        # preserves it; it must never reconstruct a boundary from graph connectivity.
+        if "boundary_refs" not in item or "trust_boundary_crossings" not in item:
+            raise ValueError("raw blocked transition is missing exact trust-boundary evidence")
+        boundary_refs = _exact_string_list(item.get("boundary_refs"), field="blocked.boundary_refs")
+        raw_crossings = item.get("trust_boundary_crossings")
+        if not isinstance(raw_crossings, list):
+            raise ValueError("blocked.trust_boundary_crossings must be an exact record list")
+        crossings: list[dict[str, Any]] = []
+        for crossing in raw_crossings:
+            if not isinstance(crossing, Mapping):
+                raise ValueError("blocked trust-boundary crossing must be a mapping")
+            crossing_item = dict(crossing)
+            crossing_path = _exact_string_list(crossing_item.get("path_edge_ids"), field="blocked.crossing.path_edge_ids")
+            if crossing_path != path:
+                raise ValueError("blocked trust-boundary crossing must preserve the exact attempted path")
+            edge_id = crossing_item.get("edge_id")
+            boundary_ref = crossing_item.get("boundary_ref")
+            if not isinstance(edge_id, str) or not edge_id.strip() or edge_id not in path:
+                raise ValueError("blocked trust-boundary crossing edge_id must be on the exact attempted path")
+            if not isinstance(boundary_ref, str) or not boundary_ref.strip():
+                raise ValueError("blocked trust-boundary crossing boundary_ref must be an exact string")
+            crossings.append(crossing_item)
+        proven_boundaries = sorted({str(crossing["boundary_ref"]) for crossing in crossings})
+        if sorted(set(boundary_refs)) != proven_boundaries:
+            raise ValueError("blocked boundary_refs must equal boundaries proven by exact crossings")
         item["boundary_refs"] = boundary_refs
         item["trust_boundary_crossings"] = crossings
-        reasons = [str(value) for value in item.get("reasons") or [] if str(value)]
+
+        reasons = _exact_string_list(item.get("reasons"), field="blocked.reasons")
         if "missing_explicit_or_authorized_capability" in reasons and path:
             edge = store.get_edge(path[-1])
             diagnostic = capability_rejection_diagnostics(edge, _budget_before_final_edge(store, path))
             if diagnostic is not None:
-                diagnostic_reasons = [str(value) for value in diagnostic.get("reasons") or [] if str(value)]
+                diagnostic_reasons = _exact_string_list(diagnostic.get("reasons"), field="diagnostic.reasons")
                 item["reasons"] = list(dict.fromkeys(reason for reason in reasons if reason != "missing_explicit_or_authorized_capability"))
                 item["reasons"].extend(reason for reason in diagnostic_reasons if reason not in item["reasons"])
                 item["failed_constraints"] = diagnostic["failed_constraints"]
                 item["unresolved_constraints"] = diagnostic["unresolved_constraints"]
                 item["candidate_capabilities"] = diagnostic["candidate_capabilities"]
                 item["inherited_capability_budget"] = diagnostic["inherited_capability_budget"]
-        final_reasons = [str(value) for value in item.get("reasons") or [] if str(value)]
+        final_reasons = _exact_string_list(item.get("reasons"), field="blocked.reasons")
         item["reason_groups"] = _reason_groups(final_reasons)
         blocked.append(item)
     enriched["blocked_transitions"] = blocked
     semantics = dict(enriched.get("semantics") or {})
+    semantics["blocked_boundary_evidence_is_engine_recorded_exact_path"] = True
     semantics["blocked_boundary_evidence_uses_exact_recorded_path_only"] = True
     semantics["blocked_transition_does_not_grant_authority"] = True
     semantics["capability_filter_is_selector_not_authority_evidence"] = True
