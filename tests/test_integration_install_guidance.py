@@ -28,6 +28,15 @@ def test_integration_state_probe_reaches_read_only_tool_layer() -> None:
     assert 'if name == "testamur.project_supply_chain"' in mcp
 
 
+def test_integration_codex_guidance_exposes_packaged_doctor() -> None:
+    guidance = GUIDANCE.read_text(encoding="utf-8")
+
+    assert "python plugins/testamur-codex/scripts/doctor.py" in guidance
+    assert "same environment that launches Codex" in guidance
+    assert "project/repository-binding MCP surfaces" in guidance
+    assert "successful doctor proves host wiring only" in guidance
+
+
 def test_integration_smoke_does_not_claim_evidence_semantics() -> None:
     guidance = GUIDANCE.read_text(encoding="utf-8")
 
