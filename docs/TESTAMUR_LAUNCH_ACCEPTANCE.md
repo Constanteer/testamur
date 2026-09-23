@@ -32,8 +32,10 @@ Acceptance language: `changed != invalid`; new observation != changed dependency
 1. From a valid same-binding Compare, continue to Impact without losing the compared revision/observation context.
 2. Impact distinguishes an explicit recorded reliance edge from material merely fetched or exposed to a model.
 3. Open Project-wide advisory review. Candidates from A and B may appear in one review queue.
-4. Open one candidate. Repository, package/version, advisory, and observation/evidence context remain inspectable.
-5. No aggregate badge, score, color, or copy converts candidate aggregation into an affectedness, safety, validity, or trust verdict.
+4. Open one candidate from A through **History / Compare**. The object workflow URL must retain the originating `project` or `project_id` context; repeat through **Impact** and **Revalidation** and fail the pass if any stage drops it.
+5. Return to the Project and open one candidate from B. Its Project context must remain the same Project while its repository/package/evidence context remains distinguishable from A; navigation continuity must not imply that A and B are one revision history.
+6. Repository, package/version, advisory, and observation/evidence context remain inspectable throughout the review loop.
+7. No aggregate badge, score, color, or copy converts candidate aggregation into an affectedness, safety, validity, or trust verdict.
 
 Acceptance language: `EXPOSED_TO_MODEL != RELIED`; candidate != affectedness verdict.
 
@@ -43,6 +45,8 @@ Acceptance language: `EXPOSED_TO_MODEL != RELIED`; candidate != affectedness ver
 2. Staleness is described as a review condition, not falsity.
 3. Revalidation requires an explicit decision/action; merely opening the new revision must not silently clear the review condition.
 4. After revalidation, the prior recorded basis remains inspectable so the decision is auditable.
+5. Complete the scoped Revalidation and use the product CTA to return to the originating Project. The CTA must preserve `project` / `project_id` rather than falling back to an unscoped project list.
+6. From that Project, continue with the other binding or advisory candidate. Completing one scoped Revalidation must not be presented as a Project-wide trust, safety, validity, or verification verdict.
 
 Acceptance language: `stale != false`.
 
@@ -50,7 +54,9 @@ Acceptance language: `stale != false`.
 
 Walk the public-to-product path once without using browser history:
 
-`marketing site → hosted app → first-run → Project → Monitor → observation → Compare → Impact → Revalidation → Help → Learn/Docs → integration install`
+`marketing site → hosted app → first-run → Project → Monitor → observation → Compare → Impact → Revalidation → Project → Help → Learn/Docs → integration install`
+
+Repeat the Compare → Impact → Revalidation segment from a Project advisory candidate and inspect the URL/context at every transition. Fail if `project` / `project_id` disappears before the explicit return to Project.
 
 Fail the pass if any transition requires guessing an undocumented URL, changes terminology for the same concept, or drops the object/repository context needed to understand the next screen.
 
