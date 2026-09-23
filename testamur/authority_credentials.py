@@ -50,17 +50,17 @@ def _alias_values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple[
 
 
 def _time(value: Any) -> datetime | None:
-    """Parse an explicitly zoned credential timestamp."""
-    if value is None:
+    """Parse an explicitly zoned credential timestamp without coercion."""
+    if not isinstance(value, str):
         return None
-    text = str(value).strip()
+    text = value.strip()
     if not text:
         return None
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:
         parsed = datetime.fromisoformat(text)
-    except (TypeError, ValueError):
+    except ValueError:
         return None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
@@ -71,6 +71,15 @@ def _at_utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("authority credential observation instant requires an explicit timezone")
     return value.astimezone(timezone.utc)
+
+
+def _explicit_state(value: Any) -> tuple[str, bool]:
+    """Normalize an optional state label without converting typed evidence."""
+    if value is None:
+        return "", True
+    if not isinstance(value, str) or not value.strip():
+        return "", False
+    return value.strip().lower(), True
 
 
 def credential_constraints_satisfied(
@@ -91,12 +100,13 @@ def credential_constraints_satisfied(
     at = _at_utc(as_of)
 
     revoked = constraints.get("revoked")
-    revocation_state = str(
-        constraints.get("revocation_state")
-        or attributes.get("revocation_state")
-        or ""
-    ).strip().lower()
-    if revoked is True or revocation_state in {"revoked", "invalid", "disabled"}:
+    revocation_raw = constraints.get("revocation_state")
+    if revocation_raw is None:
+        revocation_raw = attributes.get("revocation_state")
+    revocation_state, revocation_valid = _explicit_state(revocation_raw)
+    if not revocation_valid:
+        unresolved.add("revocation_state")
+    elif revoked is True or revocation_state in {"revoked", "invalid", "disabled"}:
         reasons.add("credential_or_edge_revoked")
 
     if constraints.get("active") is False or attributes.get("active") is False:
