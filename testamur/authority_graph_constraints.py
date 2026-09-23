@@ -44,7 +44,7 @@ def _aliased_values(container: Mapping[str, Any], keys: tuple[str, ...]) -> tupl
 
 
 def _typed_subject_values(ref: str, subject: Mapping[str, Any], keys: tuple[str, ...]) -> tuple[set[str], bool]:
-    values = {str(ref).strip()} if str(ref).strip() else set()
+    values = {ref.strip()} if isinstance(ref, str) and ref.strip() else set()
     attributes = subject.get("attributes") if isinstance(subject.get("attributes"), Mapping) else {}
     for container in (subject, attributes):
         aliases, valid = _aliased_values(container, keys)
@@ -64,7 +64,9 @@ def graph_context_constraints_satisfied(
 
     Typed aliases plus canonical refs are the only graph evidence. Aliases are
     alternate encodings and must agree; malformed objects are never stringified.
-    Connectivity alone never satisfies a permission constraint.
+    Connectivity alone never satisfies a permission constraint. A service_ref is
+    satisfied only by the exact target identity or explicit target service aliases;
+    an adjacent service elsewhere in the graph is not evidence.
     """
     remaining = {str(item) for item in unresolved}
     reasons: set[str] = set()
@@ -72,8 +74,10 @@ def graph_context_constraints_satisfied(
     target = target_subject or {}
     principal_keys = ("principal", "principals", "principal_ref", "principal_refs")
     resource_keys = ("resource", "resources", "resource_ref", "resource_refs")
+    service_keys = ("service_ref", "service_refs")
     source_principals, source_valid = _typed_subject_values(source_ref, source, principal_keys)
     target_resources, target_valid = _typed_subject_values(target_ref, target, resource_keys)
+    target_services, target_service_valid = _typed_subject_values(target_ref, target, service_keys)
 
     if not source_valid and remaining.intersection(principal_keys):
         reasons.add("principal_evidence_malformed_or_conflicting")
@@ -81,6 +85,9 @@ def graph_context_constraints_satisfied(
     if not target_valid and remaining.intersection({"resource", "resource_pattern"}):
         reasons.add("resource_evidence_malformed_or_conflicting")
         remaining.difference_update({"resource", "resource_pattern"})
+    if not target_service_valid and remaining.intersection(service_keys):
+        reasons.add("service_evidence_malformed_or_conflicting")
+        remaining.difference_update(service_keys)
 
     if "resource" in remaining:
         required, valid = _claim_values(constraints.get("resource"))
@@ -112,6 +119,16 @@ def graph_context_constraints_satisfied(
             reasons.add("principal_mismatch")
         remaining.difference_update(principal_keys)
 
+    if remaining.intersection(service_keys):
+        required, valid = _aliased_values(constraints, service_keys)
+        if not valid:
+            reasons.add("service_constraint_malformed_or_conflicting")
+        elif not required:
+            reasons.add("service_constraint_missing_value")
+        elif not required.intersection(target_services):
+            reasons.add("service_mismatch")
+        remaining.difference_update(service_keys)
+
     return not reasons and not remaining, sorted(reasons), sorted(remaining)
 
 
@@ -141,8 +158,8 @@ def evaluate_exact_edge_constraints(
     if raw is not None and not isinstance(raw, Mapping):
         return False, [], ["constraints"]
     constraints = dict(raw or {})
-    source_ref = str(edge.get("source_ref") or "")
-    target_ref = str(edge.get("target_ref") or "")
+    source_ref = edge.get("source_ref") if isinstance(edge.get("source_ref"), str) else ""
+    target_ref = edge.get("target_ref") if isinstance(edge.get("target_ref"), str) else ""
     verdict = credential_constraints_satisfied(credential_attributes, constraints, as_of=as_of)
     return resolve_graph_context_verdict(
         constraints, verdict, source_ref=source_ref, target_ref=target_ref,
