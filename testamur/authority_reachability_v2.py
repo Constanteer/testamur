@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from .authority import AuthorityRelationType, AuthoritySubjectKind, TestamurAuthorityStore
 from .authority_blocked import blocked_transition_record
 from .authority_boundaries import boundary_refs_from_crossings, project_trust_boundary_crossings
+from .authority_edge_identity import exact_authority_edge_identity, exact_nonempty_string, exact_optional_constraint_ref
 from .authority_filter import normalize_capability_filter
 from .authority_graph_constraints import evaluate_exact_edge_constraints
 from .authority_projection import capability_identity
@@ -18,6 +19,7 @@ from .authority_reachability_policy import (
     project_downstream_budget,
     traversal_state_identity,
 )
+from .authority_seed import exact_subject_ref, normalize_compromise_seeds
 
 
 class CompromiseModel(StrEnum):
@@ -68,8 +70,11 @@ _MODEL_RELATIONS = {
 
 
 def _normalize_model(value: str | CompromiseModel) -> str:
+    if isinstance(value, CompromiseModel):
+        return value.value
+    text = exact_nonempty_string(value, field="compromise_model")
     try:
-        return CompromiseModel(str(value)).value
+        return CompromiseModel(text).value
     except ValueError as exc:
         raise ValueError(f"unsupported compromise model {value!r}") from exc
 
@@ -78,41 +83,66 @@ def _as_of(value: str | datetime | None) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
     if isinstance(value, datetime):
-        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
-    text = str(value).strip()
-    if not text:
-        raise ValueError("as_of must be an ISO timestamp or datetime")
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("as_of datetime must include an explicit timezone")
+        return value.astimezone(timezone.utc)
+    text = exact_nonempty_string(value, field="as_of")
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
-    parsed = datetime.fromisoformat(text)
-    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError("as_of must be a timezone-aware ISO timestamp or datetime") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("as_of timestamp must include an explicit timezone")
+    return parsed.astimezone(timezone.utc)
 
 
 def _subject(store: TestamurAuthorityStore, ref: str) -> Mapping[str, Any]:
-    return store.maybe_subject(ref) or {}
+    exact = exact_subject_ref(ref)
+    subject = store.maybe_subject(exact)
+    if subject is None:
+        return {}
+    if not isinstance(subject, Mapping):
+        raise ValueError("authority subject must be a mapping")
+    return subject
 
 
 def _kind(store: TestamurAuthorityStore, ref: str) -> str:
-    return str(_subject(store, ref).get("kind") or AuthoritySubjectKind.OTHER.value)
+    value = _subject(store, ref).get("kind")
+    if value is None:
+        return AuthoritySubjectKind.OTHER.value
+    return exact_nonempty_string(value, field="subject.kind")
 
 
 def _attrs(store: TestamurAuthorityStore, ref: str) -> Mapping[str, Any]:
     attrs = _subject(store, ref).get("attributes")
-    return attrs if isinstance(attrs, Mapping) else {}
+    if attrs is None:
+        return {}
+    if not isinstance(attrs, Mapping):
+        raise ValueError("subject.attributes must be a mapping")
+    return attrs
 
 
 def _declared_only(edge: Mapping[str, Any]) -> bool:
     evidence = edge.get("evidence") or []
     if not evidence:
         return True
-    classes = {str(item.get("evidence_class") or "") for item in evidence if isinstance(item, Mapping)}
+    if isinstance(evidence, (str, bytes, bytearray)) or not isinstance(evidence, Sequence):
+        raise ValueError("edge.evidence must be a sequence of evidence mappings")
+    classes: set[str] = set()
+    for item in evidence:
+        if not isinstance(item, Mapping):
+            raise ValueError("edge.evidence[] must be a mapping")
+        value = item.get("evidence_class")
+        if value is not None:
+            classes.add(exact_nonempty_string(value, field="edge.evidence[].evidence_class"))
     return bool(classes) and classes <= {"DECLARED"}
 
 
 def _constraints(store: TestamurAuthorityStore, edge: Mapping[str, Any], at: datetime, *, attribute_ref: str | None = None) -> tuple[bool, list[str], list[str]]:
-    source_ref = str(edge.get("source_ref") or "")
-    target_ref = str(edge.get("target_ref") or "")
-    credential_ref = attribute_ref or source_ref
+    _, source_ref, target_ref, _ = exact_authority_edge_identity(edge)
+    credential_ref = exact_subject_ref(attribute_ref, field="attribute_ref") if attribute_ref is not None else source_ref
     return evaluate_exact_edge_constraints(
         edge,
         credential_attributes=_attrs(store, credential_ref),
@@ -124,23 +154,34 @@ def _constraints(store: TestamurAuthorityStore, edge: Mapping[str, Any], at: dat
 
 
 def _acceptance(store: TestamurAuthorityStore, edge: Mapping[str, Any], at: datetime) -> tuple[bool, list[str], list[str], list[str], bool]:
-    constraints = edge.get("constraints") if isinstance(edge.get("constraints"), Mapping) else {}
-    service_ref = str(constraints.get("service_ref") or "").strip()
-    if not service_ref:
+    _, credential_ref, _, _ = exact_authority_edge_identity(edge)
+    raw_constraints = edge.get("constraints")
+    if raw_constraints is None:
+        constraints: Mapping[str, Any] = {}
+    elif isinstance(raw_constraints, Mapping):
+        constraints = raw_constraints
+    else:
+        raise ValueError("edge.constraints must be a mapping")
+    service_ref = exact_optional_constraint_ref(constraints.get("service_ref"), field="constraints.service_ref")
+    if service_ref is None:
         return True, [], [], [], False
-    credential_ref = str(edge.get("source_ref") or "").strip()
     candidates = store.list_edges(source_ref=service_ref, target_ref=credential_ref, relation_type=AuthorityRelationType.ACCEPTS_CREDENTIAL)
     if not candidates:
         return False, [], ["credential_acceptance_not_established"], [], False
     reasons: set[str] = set()
     unresolved: set[str] = set()
+    supporting_ids: list[str] = []
+    declared_flags: list[bool] = []
     for candidate in candidates:
+        candidate_id, _, _, _ = exact_authority_edge_identity(candidate)
+        supporting_ids.append(candidate_id)
+        declared_flags.append(_declared_only(candidate))
         ok, why, unknown = _constraints(store, candidate, at, attribute_ref=credential_ref)
         if ok:
-            return True, [str(candidate["edge_id"])], [], [], _declared_only(candidate)
+            return True, [candidate_id], [], [], declared_flags[-1]
         reasons.update(why)
         unresolved.update(unknown)
-    return False, sorted(str(c["edge_id"]) for c in candidates), sorted({"credential_acceptance_constraints_unsatisfied", *reasons}), sorted(unresolved), all(_declared_only(c) for c in candidates)
+    return False, sorted(supporting_ids), sorted({"credential_acceptance_constraints_unsatisfied", *reasons}), sorted(unresolved), all(declared_flags)
 
 
 def _evidence_state(declared: bool) -> str:
@@ -148,9 +189,7 @@ def _evidence_state(declared: bool) -> str:
 
 
 def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: str, *, compromise_model: str | CompromiseModel, capability_filter: Iterable[tuple[str, str]] | None = None, max_depth: int = 8, max_paths: int = 256, expansion_budget: int = 10000, as_of: str | datetime | None = None) -> dict[str, Any]:
-    start = str(starting_subject_ref or "").strip()
-    if not start:
-        raise ValueError("starting_subject_ref must not be empty")
+    start = exact_subject_ref(starting_subject_ref, field="starting_subject_ref")
     if max_depth < 0 or max_paths < 1 or expansion_budget < 1:
         raise ValueError("invalid reachability bound")
     model = _normalize_model(compromise_model)
@@ -169,20 +208,23 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
 
     while queue:
         current = queue.popleft()
-        source = str(current["subject_ref"])
+        source = exact_subject_ref(current["subject_ref"], field="traversal.subject_ref")
         depth = int(current["depth"])
         if depth >= max_depth:
-            if store.edges_from(source): trunc.add("max_depth")
+            if store.edges_from(source):
+                trunc.add("max_depth")
             continue
         for edge in store.edges_from(source):
             expansions += 1
             if expansions > expansion_budget:
-                trunc.add("expansion_budget"); queue.clear(); break
-            relation = str(edge.get("relation_type") or "")
+                trunc.add("expansion_budget")
+                queue.clear()
+                break
+            edge_id, edge_source, target, relation = exact_authority_edge_identity(edge)
+            if edge_source != source:
+                raise ValueError("edges_from returned an authority edge whose source_ref does not match the traversal subject")
             if relation not in allowed:
                 continue
-            target = str(edge.get("target_ref") or "")
-            edge_id = str(edge.get("edge_id") or "")
             path = [*current["edge_ids"], edge_id]
             supporting = list(current.get("supporting_edge_ids") or [])
             ok, reasons, unresolved = _constraints(store, edge, at)
@@ -191,7 +233,9 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
                 accepted, support, why, unknown, support_declared = _acceptance(store, edge, at)
                 supporting = sorted({*supporting, *support})
                 if not accepted:
-                    ok = False; reasons = sorted({*reasons, *why}); unresolved = sorted({*unresolved, *unknown})
+                    ok = False
+                    reasons = sorted({*reasons, *why})
+                    unresolved = sorted({*unresolved, *unknown})
             declared = bool(current["declared"]) or _declared_only(edge) or support_declared
             crossings = project_trust_boundary_crossings(store, path)
             boundary_refs = boundary_refs_from_crossings(crossings)
@@ -210,7 +254,10 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
             budget = current["budget"]
             capabilities = exercisable_capabilities(edge, budget)
             if filters is not None:
-                capabilities = [c for c in capabilities if (str(c.get("namespace") or ""), str(c.get("action") or "")) in filters]
+                capabilities = [c for c in capabilities if (
+                    exact_nonempty_string(c.get("namespace"), field="capability.namespace"),
+                    exact_nonempty_string(c.get("action"), field="capability.action"),
+                ) in filters]
             if relation in _ACTION_RELATIONS:
                 if relation == AuthorityRelationType.HAS_CAPABILITY.value and not capabilities:
                     blocked.append(blocked_transition_record(
@@ -223,19 +270,26 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
                     ))
                 for capability in capabilities:
                     key = action_result_identity(target, capability, path)
-                    if key in seen: continue
+                    if key in seen:
+                        continue
                     seen.add(key)
                     actions.append({"source_ref": source, "target_ref": target, "relation_type": relation, "capability": capability, "reachability_class": AuthorityReachabilityClass.ACTIONABLE.value, "depth": depth + 1, "path_edge_ids": path, "supporting_edge_ids": supporting, "boundary_refs": boundary_refs, "trust_boundary_crossings": crossings, "evidence_state": _evidence_state(declared)})
                     emitted += 1
-                    if emitted >= max_paths: trunc.add("max_paths"); queue.clear(); break
-                if "max_paths" in trunc: break
+                    if emitted >= max_paths:
+                        trunc.add("max_paths")
+                        queue.clear()
+                        break
+                if "max_paths" in trunc:
+                    break
 
             propagate = relation in _PROPAGATING_RELATIONS
             target_kind = _kind(store, target)
             next_class = AuthorityReachabilityClass.CONTROLLED.value
             next_budget = budget
             if relation == AuthorityRelationType.CAN_READ.value and target_kind in _CREDENTIAL_KINDS:
-                propagate = True; next_class = AuthorityReachabilityClass.CREDENTIAL_ACQUIRED.value; next_budget = None
+                propagate = True
+                next_class = AuthorityReachabilityClass.CREDENTIAL_ACQUIRED.value
+                next_budget = None
             elif relation == AuthorityRelationType.EXPOSES.value:
                 next_class = AuthorityReachabilityClass.CREDENTIAL_ACQUIRED.value if target_kind in _CREDENTIAL_KINDS else AuthorityReachabilityClass.CONTROLLED.value
                 next_budget = None
@@ -260,24 +314,28 @@ def authority_reachability(store: TestamurAuthorityStore, starting_subject_ref: 
                 seen.add(state_key)
                 reachable.append({"subject_ref": target, "kind": target_kind, "reachability_class": next_class, "depth": depth + 1, "path_edge_ids": path, "supporting_edge_ids": supporting, "boundary_refs": boundary_refs, "trust_boundary_crossings": crossings, "evidence_state": _evidence_state(declared), "delegated_capability_budget": project_downstream_budget(next_budget)})
                 emitted += 1
-                if emitted >= max_paths: trunc.add("max_paths"); queue.clear(); break
+                if emitted >= max_paths:
+                    trunc.add("max_paths")
+                    queue.clear()
+                    break
             queue.append({"subject_ref": target, "depth": depth + 1, "edge_ids": path, "supporting_edge_ids": supporting, "visited_refs": (*current["visited_refs"], target), "budget": next_budget, "declared": declared, "class": next_class})
-        if trunc & {"expansion_budget", "max_paths"}: break
+        if trunc & {"expansion_budget", "max_paths"}:
+            break
 
     by_target: dict[str, list[dict[str, Any]]] = {}
-    for action in actions: by_target.setdefault(str(action["target_ref"]), []).append(action)
+    for action in actions:
+        target_ref = exact_subject_ref(action["target_ref"], field="action.target_ref")
+        by_target.setdefault(target_ref, []).append(action)
     all_crossings: dict[tuple[str, str], dict[str, Any]] = {}
     for item in [*reachable, *actions]:
         for crossing in item.get("trust_boundary_crossings") or []:
             all_crossings[(crossing["edge_id"], crossing["boundary_ref"])] = crossing
     crossings = sorted(all_crossings.values(), key=lambda x: (x["path_position"], x["edge_id"], x["boundary_ref"]))
-    return {"schema_version": "testamur.authority-reachability.v1", "starting_subject_ref": start, "compromise_model": model, "as_of": at.isoformat().replace("+00:00", "Z"), "reachable_subjects": reachable, "actionable_capabilities": actions, "actionable_by_target": by_target, "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossings), "trust_boundary_crossings": crossings, "expansions": expansions, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"reachable_does_not_mean_exercised": True, "network_reachability_does_not_mean_authorization": True, "credential_presence_does_not_mean_universal_acceptance": True, "resource_action_does_not_imply_resource_control": True, "constraints_fail_closed": True, "delegation_preserves_capability_budget": True}}
+    return {"schema_version": "testamur.authority-reachability.v1", "starting_subject_ref": start, "compromise_model": model, "as_of": at.isoformat().replace("+00:00", "Z"), "reachable_subjects": reachable, "actionable_capabilities": actions, "actionable_by_target": by_target, "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossings), "trust_boundary_crossings": crossings, "expansions": expansions, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"reachable_does_not_mean_exercised": True, "network_reachability_does_not_mean_authorization": True, "credential_presence_does_not_mean_universal_acceptance": True, "resource_action_does_not_imply_resource_control": True, "constraints_fail_closed": True, "delegation_preserves_capability_budget": True, "authority_identities_are_exact_evidence": True}}
 
 
 def authority_blast_radius(store: TestamurAuthorityStore, compromised_refs: str | Sequence[str], *, compromise_model: str | CompromiseModel, capability_filter: Iterable[tuple[str, str]] | None = None, max_depth: int = 8, max_paths: int = 256, expansion_budget: int = 10000, as_of: str | datetime | None = None) -> dict[str, Any]:
-    refs = [compromised_refs] if isinstance(compromised_refs, str) else list(compromised_refs)
-    seeds = sorted({str(ref).strip() for ref in refs if str(ref).strip()})
-    if not seeds: raise ValueError("compromised_refs must contain at least one subject ref")
+    seeds = normalize_compromise_seeds(compromised_refs)
     results = [authority_reachability(store, ref, compromise_model=compromise_model, capability_filter=capability_filter, max_depth=max_depth, max_paths=max_paths, expansion_budget=expansion_budget, as_of=as_of) for ref in seeds]
     subjects: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
     actions: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
@@ -285,13 +343,18 @@ def authority_blast_radius(store: TestamurAuthorityStore, compromised_refs: str 
     crossings: dict[tuple[str, str], dict[str, Any]] = {}
     trunc: set[str] = set()
     for result in results:
-        for item in result["reachable_subjects"]: subjects[(str(item["subject_ref"]), tuple(item.get("path_edge_ids") or []))] = item
-        for item in result["actionable_capabilities"]: actions[(str(item["target_ref"]), capability_identity(item["capability"]), tuple(item.get("path_edge_ids") or []))] = item
+        for item in result["reachable_subjects"]:
+            subject_ref = exact_subject_ref(item["subject_ref"], field="reachable_subject.subject_ref")
+            subjects[(subject_ref, tuple(item.get("path_edge_ids") or []))] = item
+        for item in result["actionable_capabilities"]:
+            target_ref = exact_subject_ref(item["target_ref"], field="actionable_capability.target_ref")
+            actions[(target_ref, capability_identity(item["capability"]), tuple(item.get("path_edge_ids") or []))] = item
         blocked.extend(result["blocked_transitions"])
-        for crossing in result.get("trust_boundary_crossings") or []: crossings[(crossing["edge_id"], crossing["boundary_ref"])] = crossing
+        for crossing in result.get("trust_boundary_crossings") or []:
+            crossings[(crossing["edge_id"], crossing["boundary_ref"])] = crossing
         trunc.update(result["truncation_reasons"])
     crossing_values = sorted(crossings.values(), key=lambda x: (x["edge_id"], x["boundary_ref"]))
-    return {"schema_version": "testamur.authority-blast-radius.v1", "compromised_refs": seeds, "compromise_model": _normalize_model(compromise_model), "reachable_subjects": sorted(subjects.values(), key=lambda x: (int(x.get("depth") or 0), str(x.get("subject_ref") or ""), tuple(x.get("path_edge_ids") or []))), "actionable_capabilities": sorted(actions.values(), key=lambda x: (str(x.get("target_ref") or ""), capability_identity(x["capability"]), tuple(x.get("path_edge_ids") or []))), "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossing_values), "trust_boundary_crossings": crossing_values, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"blast_radius_is_potential_authority_not_observed_malicious_use": True, "affectedness_does_not_automatically_seed_compromise": True, "material_lineage_does_not_grant_authority": True}}
+    return {"schema_version": "testamur.authority-blast-radius.v1", "compromised_refs": seeds, "compromise_model": _normalize_model(compromise_model), "reachable_subjects": sorted(subjects.values(), key=lambda x: (int(x.get("depth") or 0), exact_subject_ref(x.get("subject_ref"), field="reachable_subject.subject_ref"), tuple(x.get("path_edge_ids") or []))), "actionable_capabilities": sorted(actions.values(), key=lambda x: (exact_subject_ref(x.get("target_ref"), field="actionable_capability.target_ref"), capability_identity(x["capability"]), tuple(x.get("path_edge_ids") or []))), "blocked_transitions": blocked, "trust_boundary_refs": boundary_refs_from_crossings(crossing_values), "trust_boundary_crossings": crossing_values, "truncated": bool(trunc), "truncation_reasons": sorted(trunc), "semantics": {"blast_radius_is_potential_authority_not_observed_malicious_use": True, "affectedness_does_not_automatically_seed_compromise": True, "material_lineage_does_not_grant_authority": True, "compromise_seeds_are_explicit_authority_assumptions": True, "authority_identities_are_exact_evidence": True}}
 
 
 __all__ = ["CompromiseModel", "AuthorityReachabilityClass", "authority_reachability", "authority_blast_radius"]
