@@ -67,21 +67,46 @@ def exercisable_capabilities(
     )
 
 
-def _constraint_set(constraints: Mapping[str, Any], singular: str, *plural: str) -> set[str]:
+def _constraint_set(
+    constraints: Mapping[str, Any], singular: str, *plural: str
+) -> tuple[set[str], bool]:
+    """Return exact string constraint evidence plus whether malformed evidence exists.
+
+    This helper is diagnostic only.  It deliberately does not stringify typed
+    values: a Product/CLI/Web explanation must not make malformed evidence look
+    like a valid scope, audience, service, tenant, or other authority constraint.
+    """
     result: set[str] = set()
+    malformed = False
     for key in (singular, *plural):
+        if key not in constraints:
+            continue
         value = constraints.get(key)
-        if isinstance(value, str) and value:
-            result.add(value)
-        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            result.update(str(item) for item in value if str(item))
-    return result
+        if value is None:
+            continue
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                result.add(text)
+            else:
+                malformed = True
+            continue
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    result.add(item.strip())
+                else:
+                    malformed = True
+            continue
+        malformed = True
+    return result, malformed
 
 
 def _parse_time(value: Any) -> datetime | None:
-    if value is None:
+    """Parse exact timestamp evidence without coercion or naive-time assumptions."""
+    if not isinstance(value, str):
         return None
-    text = str(value).strip()
+    text = value.strip()
     if not text:
         return None
     if text.endswith("Z"):
@@ -91,7 +116,7 @@ def _parse_time(value: Any) -> datetime | None:
     except (TypeError, ValueError):
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        return None
     return parsed.astimezone(timezone.utc)
 
 
@@ -113,16 +138,16 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
         reasons.add("resource_outside_delegation")
         failed.add("resource")
 
-    # resource_pattern is authority scope, not descriptive metadata. Keep its
-    # diagnostics aligned with authority_capability._resource_within: a concrete
-    # child resource must match the inherited pattern; a pattern-only child must
-    # preserve the exact inherited pattern rather than widening it.
     parent_pattern = pc.get("resource_pattern")
     if parent_pattern is not None:
         child_resource = candidate.get("resource")
         child_pattern = cc.get("resource_pattern")
-        if child_resource is not None:
-            if not fnmatch.fnmatchcase(str(child_resource), str(parent_pattern)):
+        if not isinstance(parent_pattern, str) or not parent_pattern.strip():
+            reasons.add("resource_pattern_evidence_malformed")
+            failed.add("resource_pattern")
+            unresolved.add("resource_pattern")
+        elif child_resource is not None:
+            if not isinstance(child_resource, str) or not fnmatch.fnmatchcase(child_resource, parent_pattern):
                 reasons.add("resource_pattern_outside_delegation")
                 failed.add("resource_pattern")
         elif child_pattern != parent_pattern:
@@ -130,10 +155,14 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
             failed.add("resource_pattern")
 
     candidate_selection = cc.get("repository_selection")
-    candidate_refs = _constraint_set(cc, "repository_ref", "repository_refs")
+    candidate_refs, candidate_refs_malformed = _constraint_set(cc, "repository_ref", "repository_refs")
     parent_selection = pc.get("repository_selection")
-    parent_refs = _constraint_set(pc, "repository_ref", "repository_refs")
-    if parent_selection == "unresolved" and candidate_selection != "unresolved":
+    parent_refs, parent_refs_malformed = _constraint_set(pc, "repository_ref", "repository_refs")
+    if candidate_refs_malformed or parent_refs_malformed:
+        reasons.add("repository_scope_evidence_malformed")
+        failed.add("repository_selection")
+        unresolved.add("repository_selection")
+    elif parent_selection == "unresolved" and candidate_selection != "unresolved":
         reasons.add("repository_selection_unresolved")
         failed.add("repository_selection")
         unresolved.add("repository_selection")
@@ -147,10 +176,15 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
         failed.add("repository_selection")
 
     for aliases, canonical in _CONSTRAINT_SETS:
-        parent_values = _constraint_set(pc, *aliases)
+        parent_values, parent_malformed = _constraint_set(pc, *aliases)
+        child_values, child_malformed = _constraint_set(cc, *aliases)
+        if parent_malformed or child_malformed:
+            reasons.add(f"{canonical}_evidence_malformed")
+            failed.add(canonical)
+            unresolved.add(canonical)
+            continue
         if not parent_values:
             continue
-        child_values = _constraint_set(cc, *aliases)
         if not child_values or not child_values <= parent_values:
             reasons.add(f"{canonical}_outside_delegation")
             failed.add(canonical)
@@ -163,7 +197,11 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
     if pc.get("expires_at") is not None:
         parent_expiry = _parse_time(pc.get("expires_at"))
         child_expiry = _parse_time(cc.get("expires_at"))
-        if parent_expiry is None or child_expiry is None or child_expiry > parent_expiry:
+        if parent_expiry is None or child_expiry is None:
+            reasons.add("expiry_evidence_malformed")
+            failed.add("expires_at")
+            unresolved.add("expires_at")
+        elif child_expiry > parent_expiry:
             reasons.add("expiry_outside_delegation")
             failed.add("expires_at")
 
@@ -202,14 +240,26 @@ def capability_rejection_diagnostics(
     failed: set[str] = set()
     unresolved: set[str] = set()
     for candidate in rejected:
-        matching_identity = [
-            parent for parent in inherited
-            if str(parent.get("namespace") or "") == str(candidate.get("namespace") or "")
-            and str(parent.get("action") or "") == str(candidate.get("action") or "")
-        ]
+        candidate_namespace = candidate.get("namespace")
+        candidate_action = candidate.get("action")
+        identity_is_exact = (
+            isinstance(candidate_namespace, str)
+            and bool(candidate_namespace.strip())
+            and isinstance(candidate_action, str)
+            and bool(candidate_action.strip())
+        )
+        matching_identity = []
+        if identity_is_exact:
+            matching_identity = [
+                parent for parent in inherited
+                if parent.get("namespace") == candidate_namespace
+                and parent.get("action") == candidate_action
+            ]
         if not matching_identity:
             reasons.add("delegated_capability_identity_mismatch")
             failed.update({"namespace", "action"})
+            if not identity_is_exact:
+                unresolved.update({"namespace", "action"})
             continue
         attributed = False
         for parent in matching_identity:
