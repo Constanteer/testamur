@@ -36,13 +36,25 @@ def test_boundary_identity_preserves_exact_authority_path():
         ("boundary_ref", {"ref": "boundary:tenant", "connected": True}),
         ("path_edge_ids", [7]),
         ("path_edge_ids", "edge:1"),
+        ("path_edge_ids", None),
         ("path_position", "0"),
         ("path_position", True),
     ],
 )
-def test_boundary_identity_rejects_typed_or_coerced_evidence(field, value):
+def test_boundary_identity_rejects_typed_null_or_coerced_evidence(field, value):
     with pytest.raises(ValueError):
         trust_boundary_crossing_identity(_crossing(**{field: value}))
+
+
+def test_boundary_identity_allows_truly_absent_path_evidence_without_inference():
+    crossing = _crossing()
+    del crossing["path_edge_ids"]
+    assert trust_boundary_crossing_identity(crossing) == (
+        "edge:1",
+        "boundary:tenant",
+        (),
+        0,
+    )
 
 
 def test_boundary_projection_rejects_connectivity_shaped_boundary_ref():
@@ -57,6 +69,16 @@ def test_boundary_aggregation_requires_exact_compromise_seed_provenance():
         aggregate_trust_boundary_crossings([
             _crossing(compromise_seed_refs=[{"subject_ref": "actor:one", "affected": True}])
         ])
+
+
+def test_boundary_aggregation_rejects_explicit_null_seed_provenance():
+    with pytest.raises(ValueError):
+        aggregate_trust_boundary_crossings([_crossing(compromise_seed_refs=None)])
+
+
+def test_boundary_aggregation_does_not_invent_missing_seed_provenance():
+    aggregated = aggregate_trust_boundary_crossings([_crossing()])
+    assert "compromise_seed_refs" not in aggregated[0]
 
 
 def test_boundary_aggregation_unions_only_explicit_exact_seed_refs():
