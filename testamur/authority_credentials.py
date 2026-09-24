@@ -5,12 +5,7 @@ from typing import Any, Mapping, Sequence
 
 
 def _explicit_string_set(value: Any) -> tuple[set[str], bool]:
-    """Return explicit string claims and whether their representation is valid.
-
-    Authority evidence is not a coercion surface: numbers, mappings, mixed
-    sequences, and empty claim containers must not become credential claims by
-    stringification.
-    """
+    """Return explicit string claims and whether their representation is valid."""
     if isinstance(value, str):
         text = value.strip()
         return ({text}, True) if text else (set(), False)
@@ -27,12 +22,7 @@ def _explicit_string_set(value: Any) -> tuple[set[str], bool]:
 
 
 def _alias_values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple[set[str], bool, bool]:
-    """Read alternate encodings of one logical claim without unioning grants.
-
-    Returns (values, present, valid). Multiple aliases may coexist only when
-    they encode exactly the same set. Conflicting aliases are ambiguous evidence,
-    not additive authority.
-    """
+    """Read alternate encodings of one logical claim without unioning grants."""
     observed: list[set[str]] = []
     for key in aliases:
         if key not in source or source.get(key) is None:
@@ -74,12 +64,24 @@ def _at_utc(value: datetime) -> datetime:
 
 
 def _explicit_state(value: Any) -> tuple[str, bool]:
-    """Normalize an optional state label without converting typed evidence."""
     if value is None:
         return "", True
     if not isinstance(value, str) or not value.strip():
         return "", False
     return value.strip().lower(), True
+
+
+def _first_present(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple[Any, bool]:
+    """Return the first explicitly present claim, preserving malformed evidence.
+
+    Authority constraints must not use Python truthiness as precedence. An explicit
+    false/zero/empty/typed value is evidence that must be validated and fail closed;
+    it must never disappear merely because a fallback attribute looks valid.
+    """
+    for key in aliases:
+        if key in source:
+            return source.get(key), True
+    return None, False
 
 
 def credential_constraints_satisfied(
@@ -115,21 +117,20 @@ def credential_constraints_satisfied(
     if constraints.get("active") is False or attributes.get("active") is False:
         reasons.add("credential_or_edge_inactive")
 
-    expiry_raw = constraints.get("expires_at") or attributes.get("expires_at")
-    if expiry_raw is not None:
+    expiry_raw, expiry_present = _first_present(constraints, ("expires_at",))
+    if not expiry_present:
+        expiry_raw, expiry_present = _first_present(attributes, ("expires_at",))
+    if expiry_present:
         expiry = _time(expiry_raw)
         if expiry is None:
             unresolved.add("expires_at")
         elif expiry <= at:
             reasons.add("credential_or_edge_expired")
 
-    not_before_raw = (
-        constraints.get("not_before")
-        or constraints.get("nbf")
-        or attributes.get("not_before")
-        or attributes.get("nbf")
-    )
-    if not_before_raw is not None:
+    not_before_raw, not_before_present = _first_present(constraints, ("not_before", "nbf"))
+    if not not_before_present:
+        not_before_raw, not_before_present = _first_present(attributes, ("not_before", "nbf"))
+    if not_before_present:
         not_before = _time(not_before_raw)
         if not_before is None:
             unresolved.add("not_before")
@@ -141,10 +142,6 @@ def credential_constraints_satisfied(
         (("scope", "scopes", "required_scope", "required_scopes"), ("scope", "scopes"), "scope", True),
         (("issuer", "issuers", "required_issuer", "required_issuers"), ("issuer", "issuers"), "issuer", False),
         (("tenant", "tenants", "tenant_id", "tenant_ids"), ("tenant", "tenants", "tenant_id", "tenant_ids"), "tenant", False),
-        # Connector installations commonly restrict a credential to an explicit
-        # resource selection. Treat these aliases as one exact claim family. The
-        # acceptance edge may require a subset, but it cannot add resources that
-        # the credential/installation did not explicitly select.
         (("repository_selection", "required_repository_selection", "required_repositories"), ("repository_selection", "repositories", "repository_refs"), "repository_selection", True),
     )
     handled: set[str] = {
