@@ -13,10 +13,7 @@ def _capability(constraints):
 def _diagnostics(parent_constraints, child_constraints):
     parent = _capability(parent_constraints)
     child = _capability(child_constraints)
-    return capability_rejection_diagnostics(
-        {"capabilities": [child]},
-        [parent],
-    )
+    return capability_rejection_diagnostics({"capabilities": [child]}, [parent])
 
 
 def test_explicit_null_scope_does_not_collapse_to_absence():
@@ -48,63 +45,68 @@ def test_falsey_provider_constraint_must_be_preserved_exactly():
 
 
 def test_falsey_provider_constraint_can_be_preserved_exactly():
-    diagnostics = _diagnostics(
-        {"connector_installation_locked": False},
-        {"connector_installation_locked": False},
-    )
+    diagnostics = _diagnostics({"connector_installation_locked": False}, {"connector_installation_locked": False})
     assert diagnostics is None
 
 
 def test_explicit_null_parent_expiry_is_malformed_not_absent():
-    diagnostics = _diagnostics(
-        {"expires_at": None},
-        {"expires_at": "2026-09-24T10:00:00Z"},
-    )
+    diagnostics = _diagnostics({"expires_at": None}, {"expires_at": "2026-09-24T10:00:00Z"})
     assert diagnostics is not None
     assert "expiry_evidence_malformed" in diagnostics["reasons"]
     assert "expires_at" in diagnostics["unresolved_constraints"]
 
 
 def test_parent_expiry_must_be_preserved_by_child():
-    diagnostics = _diagnostics(
-        {"expires_at": "2026-09-24T10:00:00Z"},
-        {},
-    )
+    diagnostics = _diagnostics({"expires_at": "2026-09-24T10:00:00Z"}, {})
     assert diagnostics is not None
     assert "expiry_not_preserved" in diagnostics["reasons"]
     assert "expires_at" in diagnostics["failed_constraints"]
 
 
 def test_child_expiry_cannot_extend_parent_delegation():
-    diagnostics = _diagnostics(
-        {"expires_at": "2026-09-24T10:00:00Z"},
-        {"expires_at": "2026-09-24T11:00:00Z"},
-    )
+    diagnostics = _diagnostics({"expires_at": "2026-09-24T10:00:00Z"}, {"expires_at": "2026-09-24T11:00:00Z"})
     assert diagnostics is not None
     assert "expiry_outside_delegation" in diagnostics["reasons"]
 
 
 def test_child_may_narrow_parent_expiry():
-    diagnostics = _diagnostics(
-        {"expires_at": "2026-09-24T10:00:00Z"},
-        {"expires_at": "2026-09-24T09:00:00Z"},
-    )
+    diagnostics = _diagnostics({"expires_at": "2026-09-24T10:00:00Z"}, {"expires_at": "2026-09-24T09:00:00Z"})
     assert diagnostics is None
 
 
 def test_explicit_null_repository_selection_is_not_absence():
     malformed = _capability({"repository_selection": None})
     assert capability_allowed(malformed, None) is False
+    diagnostics = _diagnostics({"repository_selection": None}, {"repository_selection": "all"})
+    assert diagnostics is not None
+    assert "repository_selection_evidence_malformed" in diagnostics["reasons"]
+    assert "repository_selection" in diagnostics["unresolved_constraints"]
 
 
 def test_typed_repository_selection_is_not_stringified():
     malformed = _capability({"repository_selection": {"mode": "all"}})
     assert capability_allowed(malformed, None) is False
+    diagnostics = _diagnostics({"repository_selection": "all"}, {"repository_selection": {"mode": "selected"}})
+    assert diagnostics is not None
+    assert "repository_selection_evidence_malformed" in diagnostics["reasons"]
 
 
 def test_selected_repository_scope_requires_exact_refs():
     malformed = _capability({"repository_selection": "selected"})
     assert capability_allowed(malformed, None) is False
+    diagnostics = _diagnostics({"repository_selection": "selected"}, {"repository_selection": "selected", "repository_ref": "repo:one"})
+    assert diagnostics is not None
+    assert "repository_selection_evidence_malformed" in diagnostics["reasons"]
+
+
+def test_all_repository_scope_rejects_stray_refs_as_malformed_evidence():
+    diagnostics = _diagnostics(
+        {"repository_selection": "all", "repository_ref": "repo:one"},
+        {"repository_selection": "selected", "repository_ref": "repo:one"},
+    )
+    assert diagnostics is not None
+    assert "repository_selection_evidence_malformed" in diagnostics["reasons"]
+    assert "repository_selection" in diagnostics["unresolved_constraints"]
 
 
 def test_selected_repository_scope_may_narrow_all_parent():
