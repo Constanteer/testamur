@@ -1,3 +1,4 @@
+from testamur.authority_capability import capability_allowed, capability_is_attenuation
 from testamur.authority_reachability_policy import capability_rejection_diagnostics
 
 
@@ -51,7 +52,6 @@ def test_falsey_provider_constraint_can_be_preserved_exactly():
         {"connector_installation_locked": False},
         {"connector_installation_locked": False},
     )
-    # Exact preservation must not manufacture a rejection by itself.
     assert diagnostics is None
 
 
@@ -90,3 +90,40 @@ def test_child_may_narrow_parent_expiry():
         {"expires_at": "2026-09-24T09:00:00Z"},
     )
     assert diagnostics is None
+
+
+def test_explicit_null_repository_selection_is_not_absence():
+    malformed = _capability({"repository_selection": None})
+    assert capability_allowed(malformed, None) is False
+
+
+def test_typed_repository_selection_is_not_stringified():
+    malformed = _capability({"repository_selection": {"mode": "all"}})
+    assert capability_allowed(malformed, None) is False
+
+
+def test_selected_repository_scope_requires_exact_refs():
+    malformed = _capability({"repository_selection": "selected"})
+    assert capability_allowed(malformed, None) is False
+
+
+def test_selected_repository_scope_may_narrow_all_parent():
+    parent = _capability({"repository_selection": "all"})
+    child = _capability({"repository_selection": "selected", "repository_ref": "repo:one"})
+    assert capability_is_attenuation(child, parent) is True
+
+
+def test_falsey_provider_constraint_cannot_disappear_in_canonical_attenuation():
+    parent = _capability({"connector_installation_locked": False})
+    child = _capability({})
+    assert capability_is_attenuation(child, parent) is False
+
+
+def test_explicit_null_constraints_container_is_malformed():
+    malformed = {"namespace": "github", "action": "contents:read", "constraints": None}
+    assert capability_allowed(malformed, None) is False
+
+
+def test_typed_constraint_identity_is_malformed():
+    malformed = {"namespace": "github", "action": "contents:read", "constraints": {7: False}}
+    assert capability_allowed(malformed, None) is False
