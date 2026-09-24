@@ -23,7 +23,9 @@ def trust_boundary_crossing_identity(crossing: Mapping[str, Any]) -> tuple[str, 
     be reached through distinct authority paths carrying different evidence and
     compromise provenance. Missing path evidence stays missing (the empty tuple),
     but explicitly present null/malformed path evidence fails closed; callers must
-    not reconstruct it from graph connectivity or material lineage.
+    not reconstruct it from graph connectivity or material lineage. When an exact
+    path is recorded, its position must identify the same recorded edge rather than
+    merely being a plausible integer supplied alongside unrelated connectivity.
     """
     if not isinstance(crossing, Mapping):
         raise ValueError("trust-boundary crossing must be a mapping")
@@ -34,9 +36,16 @@ def trust_boundary_crossing_identity(crossing: Mapping[str, Any]) -> tuple[str, 
         field="crossing.path_edge_ids",
         allow_absent="path_edge_ids" not in crossing,
     )
-    path_position = crossing.get("path_position", 0)
+    if "path_position" not in crossing:
+        raise ValueError("crossing.path_position must be explicitly recorded")
+    path_position = crossing["path_position"]
     if isinstance(path_position, bool) or not isinstance(path_position, int) or path_position < 0:
         raise ValueError("crossing.path_position must be a non-negative integer")
+    if path_edge_ids:
+        if path_position >= len(path_edge_ids):
+            raise ValueError("crossing.path_position must identify an edge on the exact recorded path")
+        if path_edge_ids[path_position] != edge_id:
+            raise ValueError("crossing.edge_id must equal the edge at crossing.path_position on the exact recorded path")
     return edge_id, boundary_ref, path_edge_ids, path_position
 
 
