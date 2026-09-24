@@ -82,10 +82,11 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
         resource = capability.get("resource")
         if resource is not None and (not isinstance(resource, str) or not resource.strip()):
             return False
-    raw_constraints = capability.get("constraints")
-    if raw_constraints is not None and not isinstance(raw_constraints, Mapping):
+    if "constraints" in capability and not isinstance(capability.get("constraints"), Mapping):
         return False
     constraints = _constraints(capability)
+    if any(not isinstance(key, str) or not key.strip() for key in constraints):
+        return False
     if "expires_at" in constraints and _parse_time(constraints.get("expires_at")) is None:
         return False
     if "resource_pattern" in constraints:
@@ -107,9 +108,9 @@ def _well_formed(capability: Mapping[str, Any]) -> bool:
             return False
     if not _aliases_are_consistent(constraints, repository_aliases):
         return False
-    selection = constraints.get("repository_selection")
-    if selection is not None:
-        if selection not in {"all", "selected", "unresolved"}:
+    if "repository_selection" in constraints:
+        selection = constraints["repository_selection"]
+        if not isinstance(selection, str) or selection not in {"all", "selected", "unresolved"}:
             return False
         refs = _constraint_set(constraints, *repository_aliases)
         if selection == "selected" and not refs:
@@ -135,9 +136,9 @@ def _resource_within(child: str | None, parent: str | None, parent_pattern: str 
 
 
 def _repository_scope_is_attenuation(child_constraints: Mapping[str, Any], parent_constraints: Mapping[str, Any]) -> bool:
-    parent_selection = parent_constraints.get("repository_selection")
-    if parent_selection is None:
+    if "repository_selection" not in parent_constraints:
         return True
+    parent_selection = parent_constraints["repository_selection"]
     child_selection = child_constraints.get("repository_selection")
     parent_refs = _constraint_set(parent_constraints, "repository_ref", "repository_refs")
     child_refs = _constraint_set(child_constraints, "repository_ref", "repository_refs")
@@ -178,16 +179,17 @@ def capability_is_attenuation(child: Mapping[str, Any], parent: Mapping[str, Any
     for key in gate_keys:
         if pc.get(key) is True and cc.get(key) is not True:
             return False
-    if pc.get("expires_at") is not None:
-        parent_expiry, child_expiry = _parse_time(pc.get("expires_at")), _parse_time(cc.get("expires_at"))
+    if "expires_at" in pc:
+        parent_expiry = _parse_time(pc.get("expires_at"))
+        child_expiry = _parse_time(cc.get("expires_at")) if "expires_at" in cc else None
         if parent_expiry is None or child_expiry is None or child_expiry > parent_expiry:
             return False
-    if pc.get("resource_pattern") is not None:
+    if "resource_pattern" in pc:
         child_resource, child_pattern = child.get("resource"), cc.get("resource_pattern")
         if child_resource is None and child_pattern != pc.get("resource_pattern"):
             return False
     for key, value in pc.items():
-        if key in handled or value in (None, False, "", [], {}, ()):
+        if key in handled:
             continue
         if key not in cc or cc[key] != value:
             return False
