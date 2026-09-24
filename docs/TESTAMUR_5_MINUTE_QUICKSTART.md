@@ -91,14 +91,14 @@ testamur.record_project_advisory_assessment
 
 Before scanning, `testamur.project_repository_binding` exposes the durable binding and its scanner-eligibility state; enable/disable or unbind changes scanner eligibility without rewriting binding history. For an advisory candidate, use `testamur.project_advisory_revalidation` to read the canonical review projection. After doing the actual review, `testamur.record_project_advisory_assessment` records evidence, basis, analyzer provenance, and optional supersession. The caller must not manufacture a canonical `verdict`, `state`, or `trust_score`; reload the project projection after the write to see the canonical result.
 
-A model fetching or seeing evidence is exposure, not durable reliance. Host integrations must keep `EXPOSED_TO_MODEL != RELIED`; reliance requires the explicit reconciliation path defined by the Testamur agent protocol.
+Exposure is not durable reliance. `EXPOSED_TO_MODEL != RELIED` remains a core semantic boundary; durable reliance requires an explicit reconciliation record in canonical Testamur state.
 
 ## What to open next
 
 - `README.md` — product and CLI orientation.
 - `docs/TESTAMUR_LAUNCH_WALKTHROUGH.md` — launch/demo walkthrough and narration.
-- `docs/TESTAMUR_AGENT_PROTOCOL.md` — host/MCP semantics and explicit reconciliation.
-- `docs/TESTAMUR_EXISTING_PROJECT_SUPPLY_CHAIN_MATHHUB_AGENT_SPEC.md` — repository binding, scanner, advisory, and agent contracts.
+- `docs/TESTAMUR_PRODUCT_API.md` — canonical product/service boundary and stable envelopes.
+- `docs/TESTAMUR_SOURCE_GATEWAY_IMPLEMENTATION.md` — exact-revision retrieval and local gateway behavior.
 - `docs/TESTAMUR_LINEAGE_AFFECTEDNESS_SPEC.md` — why lineage/overlap is evidence for impact analysis rather than an automatic verdict.
 
 If the UI or an integration appears to contradict the distinctions at the top of this guide, treat that as a product bug rather than inventing a new status interpretation.
