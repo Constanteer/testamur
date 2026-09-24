@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from .authority_exact import exact_nonempty_string
+from .authority_edge_identity import exact_nonempty_string
 from .authority_filter import normalize_capability_filter
 from .authority_product_service import (
     AuthorityProductService,
