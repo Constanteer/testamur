@@ -113,16 +113,14 @@ def credential_constraints_satisfied(
     audience/scope/issuer/tenant/resource-selection evidence remains unresolved
     and fails closed. Graph-bound constraints such as service_ref are deliberately
     left unresolved for the exact-edge graph-context evaluator; they are never
-    decorative metadata.
+    decorative metadata. Unknown constraints are also unresolved by presence,
+    including falsey values: absence and an explicit null/false/empty value are
+    not interchangeable authority evidence.
     """
     reasons: set[str] = set()
     unresolved: set[str] = set()
     at = _at_utc(as_of)
 
-    # Boolean authority state is exact evidence. Strings such as "false", integers,
-    # mappings, and nulls must not be interpreted through Python truthiness or be
-    # silently ignored. Edge and credential state are independent restrictions:
-    # either one may revoke/deactivate, while neither may grant authority.
     for source in (constraints, attributes):
         revoked, revoked_present, revoked_valid = _explicit_bool(source, "revoked")
         if revoked_present and not revoked_valid:
@@ -194,9 +192,6 @@ def credential_constraints_satisfied(
         elif not required.intersection(actual):
             reasons.add(f"{label}_mismatch")
 
-    # Interactive gates are restrictions on an already-explicit credential edge,
-    # never grants. Their representation is exact boolean evidence: a typed/null
-    # value must not disappear merely because `is True` would ignore it.
     for gate in ("approval_required", "human_confirmation_required", "mfa_required"):
         required, present, valid = _explicit_bool(constraints, gate)
         if present and not valid:
@@ -204,13 +199,12 @@ def credential_constraints_satisfied(
         elif required is True:
             reasons.add(gate)
 
-    for key, value in constraints.items():
+    for key in constraints:
         if key in handled:
             continue
-        if value not in (None, False, "", [], {}, ()):
-            if not isinstance(key, str) or not key.strip():
-                raise ValueError("authority constraint keys must be exact non-empty strings")
-            unresolved.add(key.strip())
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("authority constraint keys must be exact non-empty strings")
+        unresolved.add(key.strip())
 
     return not reasons and not unresolved, sorted(reasons), sorted(unresolved)
 
