@@ -50,10 +50,28 @@ def _strings(value: Any, *, field: str) -> list[str]:
     return result
 
 
+def _compromise_seeds(result: Mapping[str, Any]) -> list[str]:
+    """Project only explicit engine compromise assumptions.
+
+    Reachability has one explicit starting subject; blast radius has an explicit
+    compromised-ref list.  No lineage, reliance, affectedness, connectivity, or
+    reachable-subject record is promoted into a seed by this presentation layer.
+    """
+    if "compromised_refs" in result:
+        return _strings(result.get("compromised_refs"), field="compromised_refs")
+    if "starting_subject_ref" not in result:
+        return []
+    seed = result.get("starting_subject_ref")
+    if not isinstance(seed, str) or not seed.strip():
+        raise ValueError("starting_subject_ref must be exact evidence")
+    return [seed]
+
+
 def project_authority_decision(result: Mapping[str, Any]) -> dict[str, Any]:
     """Stable explanation projection; never reconstructs or enlarges authority."""
     if not isinstance(result, Mapping):
         raise ValueError("authority result must be a mapping")
+    compromise_seeds = _compromise_seeds(result)
     reachable = _records(result.get("reachable_subjects"), field="reachable_subjects")
     actionable = _records(result.get("actionable_capabilities"), field="actionable_capabilities")
     blocked = _records(result.get("blocked_transitions"), field="blocked_transitions")
@@ -94,6 +112,7 @@ def project_authority_decision(result: Mapping[str, Any]) -> dict[str, Any]:
 
     return {
         "schema_version": "testamur.authority-decision-projection.v1",
+        "compromise_seeds": compromise_seeds,
         "reachable": reachable_projection,
         "actionable_capabilities": actionable,
         "blocked": blocked_projection,
@@ -103,6 +122,9 @@ def project_authority_decision(result: Mapping[str, Any]) -> dict[str, Any]:
         "truncation_reasons": _strings(result.get("truncation_reasons"), field="truncation_reasons"),
         "semantics": {
             "projection_is_not_authority_evidence": True,
+            "compromise_seeds_are_explicit_authority_assumptions": True,
+            "affectedness_does_not_seed_compromise": True,
+            "material_lineage_does_not_seed_compromise": True,
             "supporting_edges_do_not_expand_capability_budget": True,
             "connectivity_is_not_authorization": True,
             "lineage_reliance_affectedness_are_not_authority_grants": True,
