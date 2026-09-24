@@ -1,0 +1,38 @@
+{
+  "schema": "testamur.demo.evidence-flow.v1",
+  "project": {
+    "name": "Refund policy evidence demo",
+    "disposable": true,
+    "network_required": false
+  },
+  "source": {
+    "name": "Refund policy",
+    "canonical": true,
+    "revisions": [
+      {"id": "baseline", "path": "baseline/policy.txt"},
+      {"id": "current", "path": "current/policy.txt"}
+    ]
+  },
+  "compare": {
+    "from": "baseline",
+    "to": "current",
+    "expected_change": "30 days -> 14 days"
+  },
+  "impact": {
+    "candidate": "downstream/refund-playbook.txt",
+    "recorded_basis": "baseline",
+    "requires_explicit_affectedness_decision": true
+  },
+  "revalidation": {
+    "explicit": true,
+    "automatic_invalidity_from_change": false
+  },
+  "semantic_boundaries": [
+    "recorded != verified",
+    "fetched != relied",
+    "changed != invalid",
+    "stale != false",
+    "EXPOSED_TO_MODEL != RELIED",
+    "recorded reliance provenance != affectedness"
+  ]
+}
