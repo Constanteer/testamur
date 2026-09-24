@@ -10,7 +10,7 @@ Project
        └─ one recorded Source revision
 ```
 
-That is the minimum useful state from which Testamur can tell you that an upstream basis changed later.
+That is the minimum useful state from which Testamur can later show that a recorded upstream Source changed. It does not, by itself, say that any downstream work relied on that Source.
 
 ## 1. Install
 
@@ -103,28 +103,39 @@ changed != invalid
 stale != false
 ```
 
-Open the Source history to inspect recorded observations. Where reliance/lineage data exists, open **Impact** to see which downstream work may need attention.
+Open the Source history and **Compare** to inspect the recorded observations and the actual revision change.
+
+Where recorded reliance/lineage data exists, open **Impact**. Each downstream candidate should show the recorded basis/revision that produced the relationship. If the provider did not record that provenance, Testamur should say it is unavailable rather than infer it from timestamps, the current revision, or list order.
+
+An Impact candidate is a review candidate, not a conclusion that the downstream work is affected:
+
+```text
+recorded reliance provenance != affectedness
+```
 
 ## 6. Revalidate deliberately
 
-If downstream work depended on the changed basis:
+For each downstream review candidate:
 
-1. inspect the change;
-2. decide whether the downstream result still holds;
-3. update/re-run the work when necessary;
-4. record the new review or result against the new basis.
+1. inspect its recorded basis/revision provenance;
+2. inspect the upstream change;
+3. decide whether the downstream result is actually affected;
+4. update or re-run the work when necessary;
+5. record the new review or result against the new basis.
 
 That is the Testamur loop:
 
 ```text
-exact basis
+recorded basis
     ↓
 upstream change
     ↓
-affected work
+downstream review candidate
     ↓
 explicit revalidation
 ```
+
+Testamur preserves the evidence needed to make that judgment; it does not replace the judgment with a generic trust score.
 
 ## 7. Add agent integrations
 
