@@ -20,11 +20,11 @@ lineage != affectedness verdict
 ## What it provides
 
 - **Source provenance** — Sources, Snapshots and exact SourceRevisions.
-- **Work sessions** — observable session/tool activity without claiming access to hidden model reasoning.
+- **Work sessions** — bounded, inspectable activity records that can be reconciled into explicit reliance.
 - **Explicit reliance** — reconciliation, Policy, Assessment and durable Reliance records.
 - **Change monitoring** — Watches, Evaluations and Alerts for upstream sources.
 - **Impact analysis** — lineage and affectedness evidence for targeted revalidation.
-- **Source Gateway** — exact-revision source access, including a local stdio MCP server.
+- **Source Gateway** — exact-revision source access for local tools and integrations.
 - **Local interfaces** — CLI plus a local Web workspace over the same canonical state.
 
 ## Install from source
@@ -68,7 +68,7 @@ SourceRevision
   -> revalidation
 ```
 
-A source being fetched or shown to an agent is evidence of exposure, not automatically evidence of reliance. Likewise, an upstream change creates a reason to inspect downstream work; it does not automatically make that work invalid.
+A source being fetched or exposed is not automatically evidence of reliance. Likewise, an upstream change creates a reason to inspect downstream work; it does not automatically make that work invalid.
 
 ## Software supply-chain import
 
@@ -104,7 +104,7 @@ testamur-gateway-mcp
 
 The MCP process is intended to be started by an MCP host rather than used as an interactive CLI.
 
-Agent/editor integrations live in the separate `Constanteer/testamur-plugins` repository.
+Host-specific integrations and their documentation live in the separate `Constanteer/testamur-plugins` repository. The core repository keeps only host-neutral product, data-model, CLI, API, provenance, impact and revalidation documentation.
 
 ## Local state
 
@@ -124,8 +124,6 @@ Start with:
 - [Architecture](ARCHITECTURE.md)
 - [Quick launch](QUICK_LAUNCH.md)
 - [Product API](docs/TESTAMUR_PRODUCT_API.md)
-- [Agent protocol](docs/TESTAMUR_AGENT_PROTOCOL.md)
-- [Agent workflow](docs/TESTAMUR_AGENT_WORKFLOW.md)
 - [Temporal model](docs/TESTAMUR_TEMPORAL_MODEL.md)
 - [Lineage engine](docs/TESTAMUR_LINEAGE_ENGINE.md)
 - [Environment model](docs/TESTAMUR_ENVIRONMENT.md)
