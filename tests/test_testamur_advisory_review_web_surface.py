@@ -37,3 +37,12 @@ def test_advisory_review_surface_records_evidence_not_verdicts():
     assert "payload.verdict" not in source
     assert "payload.trust_score" not in source
 
+def test_advisory_review_observer_ignores_only_self_mutations():
+    source = (WEB / "advisory-review-ui.js").read_text(encoding="utf-8")
+    assert "mutationIsAdvisorySelfMutation" in source
+    assert "mutations.every(mutationIsAdvisorySelfMutation)" in source
+    assert "target.closest(advisorySurfaceSelector)" in source
+    assert "node.matches(advisorySurfaceSelector)" in source
+    assert "new MutationObserver(queueRender)" not in source
+    assert "queueRender();" in source
+
