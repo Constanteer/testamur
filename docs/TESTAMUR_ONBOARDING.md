@@ -17,7 +17,7 @@ that basis changes later
     ↓
 Testamur shows what may need review
     ↓
-I decide and revalidate
+I inspect the recorded basis, decide affectedness, and revalidate
 ```
 
 Do not lead first-run UI with internal names such as `SourceRevision`, `WorkSession`, `Affectedness`, or canonical `tst:*` identifiers. Those remain available as inspectable advanced concepts.
@@ -36,7 +36,8 @@ Do not lead first-run UI with internal names such as `SourceRevision`, `WorkSess
    - old revision;
    - new revision;
    - mechanical compare;
-   - affected downstream work;
+   - downstream review candidates with their recorded basis/revision provenance;
+   - explicit affectedness decision;
    - explicit revalidation.
 5. A five-minute quickstart that creates real product state.
 6. A persistent Help entry linking to:
@@ -101,9 +102,12 @@ fetched != relied
 changed != invalid
 stale != false
 EXPOSED_TO_MODEL != RELIED
+recorded reliance provenance != affectedness
 ```
 
 No onboarding copy may introduce a generic trust/confidence score as a substitute for explicit evidence states.
+
+Impact is a review-candidate surface, not an affectedness verdict. When Testamur has recorded a downstream basis/revision, onboarding should show that provenance before asking for an affectedness decision. If the provider did not record that provenance, the UI must say it is unavailable; it must not infer a basis from timestamps, the current revision, or list order.
 
 ## Demo Project rule
 
