@@ -60,8 +60,6 @@ def _constraint_set(
         if key not in constraints:
             continue
         value = constraints.get(key)
-        # Presence is evidence. Explicit null must not collapse to absence and
-        # silently widen a delegated capability.
         if value is None:
             malformed = True
             continue
@@ -128,12 +126,23 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
             reasons.add("resource_pattern_not_preserved")
             failed.add("resource_pattern")
 
+    candidate_selection_present = "repository_selection" in cc
+    parent_selection_present = "repository_selection" in pc
     candidate_selection = cc.get("repository_selection")
-    candidate_refs, candidate_refs_malformed = _constraint_set(cc, "repository_ref", "repository_refs")
     parent_selection = pc.get("repository_selection")
+    candidate_refs, candidate_refs_malformed = _constraint_set(cc, "repository_ref", "repository_refs")
     parent_refs, parent_refs_malformed = _constraint_set(pc, "repository_ref", "repository_refs")
-    if candidate_refs_malformed or parent_refs_malformed:
-        reasons.add("repository_scope_evidence_malformed")
+    valid_selections = {"all", "selected", "unresolved"}
+    selection_malformed = (
+        (candidate_selection_present and (not isinstance(candidate_selection, str) or candidate_selection not in valid_selections))
+        or (parent_selection_present and (not isinstance(parent_selection, str) or parent_selection not in valid_selections))
+        or (candidate_selection == "selected" and not candidate_refs)
+        or (parent_selection == "selected" and not parent_refs)
+        or (candidate_selection in {"all", "unresolved"} and bool(candidate_refs))
+        or (parent_selection in {"all", "unresolved"} and bool(parent_refs))
+    )
+    if candidate_refs_malformed or parent_refs_malformed or selection_malformed:
+        reasons.add("repository_selection_evidence_malformed")
         failed.add("repository_selection")
         unresolved.add("repository_selection")
     elif parent_selection == "unresolved" and candidate_selection != "unresolved":
@@ -141,7 +150,7 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
         failed.add("repository_selection")
         unresolved.add("repository_selection")
     elif parent_selection == "selected" and (
-        candidate_selection != "selected" or not candidate_refs or not candidate_refs <= parent_refs
+        candidate_selection != "selected" or not candidate_refs <= parent_refs
     ):
         reasons.add("repository_scope_outside_delegation")
         failed.add("repository_selection")
@@ -209,8 +218,6 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
             failed.add("provider_constraint")
             unresolved.add("provider_constraint")
             continue
-        # Provider-specific constraints are exact evidence too. A falsey value is
-        # still present and therefore must be preserved exactly downstream.
         if key not in cc or cc[key] != value:
             reasons.add("provider_constraint_mismatch")
             failed.add(key)
