@@ -39,17 +39,43 @@ def _payload() -> dict:
                         "relation_type": "CAN_ACT_AS",
                         "reachability_class": "credential_gated",
                         "reasons": ["audience_mismatch"],
+                        "reason_groups": {
+                            "credential_or_token": ["audience_mismatch"],
+                            "capability_or_delegation": [],
+                            "approval_or_mfa": [],
+                            "trust_boundary_policy": [],
+                            "other": [],
+                        },
+                        "failed_constraints": ["audience"],
                         "unresolved_constraints": ["device_binding"],
                         "path_edge_ids": ["edge:delegation"],
                         "supporting_edge_ids": ["edge:accepts-token"],
+                        "boundary_refs": ["boundary:github"],
+                        "trust_boundary_crossings": [
+                            {
+                                "edge_id": "edge:delegation",
+                                "boundary_ref": "boundary:github",
+                                "path_position": 0,
+                                "path_edge_ids": ["edge:delegation"],
+                            }
+                        ],
+                        "candidate_capabilities": [],
+                        "inherited_capability_budget": [],
+                        "compromise_seed_refs": ["svc:connector"],
                         "evidence_state": "recorded",
                     }
                 ],
                 "blocked_reason_counts": {"audience_mismatch": 1},
+                "failed_constraint_counts": {"audience": 1},
                 "unresolved_constraint_counts": {"device_binding": 1},
                 "trust_boundary_refs": ["boundary:github"],
                 "trust_boundary_crossings": [
-                    {"edge_id": "edge:delegation", "boundary_ref": "boundary:github", "path_position": 1}
+                    {
+                        "edge_id": "edge:delegation",
+                        "boundary_ref": "boundary:github",
+                        "path_position": 0,
+                        "path_edge_ids": ["edge:delegation"],
+                    }
                 ],
             },
             "summary": {"actionable_capability_count": 1, "blocked_transition_count": 1},
@@ -69,6 +95,7 @@ def test_web_projection_preserves_constrained_capability_and_exact_diagnostics()
     }
     blocked = view["blocked_transitions"][0]
     assert blocked["reasons"] == ["audience_mismatch"]
+    assert blocked["failed_constraints"] == ["audience"]
     assert blocked["unresolved_constraints"] == ["device_binding"]
     assert blocked["path_edge_ids"] == ["edge:delegation"]
     assert blocked["supporting_edge_ids"] == ["edge:accepts-token"]
@@ -106,6 +133,43 @@ def test_web_projection_rejects_raw_engine_or_lineage_payloads() -> None:
         project_authority_web_view({"ok": True, "schema": "testamur.authority-reachability.v1", "result": {}})
     with pytest.raises(ValueError):
         project_authority_web_view({"ok": True, "schema": "testamur.product.impact.v1", "result": {}})
+
+
+def test_web_projection_rejects_connectivity_shaped_authority_identity() -> None:
+    payload = _payload()
+    payload["result"]["diagnostics"]["blocked_transitions"][0]["supporting_edge_ids"] = [
+        {"edge_id": "edge:accepts-token", "connected": True}
+    ]
+    with pytest.raises(ValueError, match="supporting_edge_ids"):
+        project_authority_web_view(payload)
+
+
+def test_web_projection_rejects_affectedness_shaped_compromise_seed() -> None:
+    payload = _payload()
+    payload["result"]["diagnostics"]["blocked_transitions"][0]["compromise_seed_refs"] = [
+        {"ref": "svc:connector", "affected": True}
+    ]
+    with pytest.raises(ValueError, match="compromise_seed_refs"):
+        project_authority_web_view(payload)
+
+
+def test_web_projection_rejects_malformed_crossing_instead_of_silently_dropping_it() -> None:
+    payload = _payload()
+    payload["result"]["diagnostics"]["trust_boundary_crossings"][0]["boundary_ref"] = {
+        "ref": "boundary:github",
+        "connected": True,
+    }
+    with pytest.raises(ValueError, match="boundary_ref"):
+        project_authority_web_view(payload)
+
+
+def test_web_projection_rejects_typed_reason_instead_of_stringifying_it() -> None:
+    payload = _payload()
+    payload["result"]["diagnostics"]["blocked_transitions"][0]["reason_groups"]["credential_or_token"] = [
+        {"reason": "audience_mismatch"}
+    ]
+    with pytest.raises(ValueError, match="reason_groups"):
+        project_authority_web_view(payload)
 
 
 def test_error_envelope_passes_through_without_synthesizing_authority() -> None:
