@@ -60,7 +60,10 @@ def _constraint_set(
         if key not in constraints:
             continue
         value = constraints.get(key)
+        # Presence is evidence. Explicit null must not collapse to absence and
+        # silently widen a delegated capability.
         if value is None:
+            malformed = True
             continue
         if isinstance(value, str):
             text = value.strip()
@@ -161,7 +164,16 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
             failed.add(canonical)
 
     for key in _GATE_KEYS:
-        if pc.get(key) is True and cc.get(key) is not True:
+        parent_present = key in pc
+        child_present = key in cc
+        parent_gate = pc.get(key)
+        child_gate = cc.get(key)
+        if (parent_present and not isinstance(parent_gate, bool)) or (child_present and not isinstance(child_gate, bool)):
+            reasons.add(f"{key}_evidence_malformed")
+            failed.add(key)
+            unresolved.add(key)
+            continue
+        if parent_gate is True and child_gate is not True:
             reasons.add(f"{key}_not_preserved")
             failed.add(key)
 
@@ -181,11 +193,18 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
     handled.update(_REPOSITORY_KEYS)
     handled.update({"expires_at", "resource_pattern"})
     for key, value in pc.items():
-        if key in handled or value in (None, False, "", [], {}, ()):
+        if key in handled:
             continue
+        if not isinstance(key, str) or not key.strip():
+            reasons.add("provider_constraint_evidence_malformed")
+            failed.add("provider_constraint")
+            unresolved.add("provider_constraint")
+            continue
+        # Provider-specific constraints are exact evidence too. A falsey value is
+        # still present and therefore must be preserved exactly downstream.
         if key not in cc or cc[key] != value:
             reasons.add("provider_constraint_mismatch")
-            failed.add(str(key))
+            failed.add(key)
 
     return reasons, failed, unresolved
 
