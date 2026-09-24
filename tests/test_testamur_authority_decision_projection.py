@@ -7,6 +7,7 @@ from testamur.authority_projection import project_authority_decision
 
 def test_decision_projection_preserves_budget_support_and_boundary_evidence():
     result = {
+        "starting_subject_ref": "session",
         "reachable_subjects": [{
             "subject_ref": "principal",
             "reachability_class": "CONTROLLED",
@@ -35,6 +36,7 @@ def test_decision_projection_preserves_budget_support_and_boundary_evidence():
         "truncation_reasons": [],
     }
     projection = project_authority_decision(result)
+    assert projection["compromise_seeds"] == ["session"]
     assert projection["reachable"][0]["supporting_edge_ids"] == ["edge:accepts"]
     assert projection["blocked"][0]["inherited_capability_budget"][0]["action"] == "repo.read"
     assert projection["blocked"][0]["candidate_capabilities"][0]["action"] == "repo.admin"
@@ -50,6 +52,35 @@ def test_decision_projection_does_not_stringify_connectivity_shaped_identity():
                 "path_edge_ids": [], "supporting_edge_ids": [], "boundary_refs": [],
             }],
             "actionable_capabilities": [], "blocked_transitions": [],
+            "trust_boundary_refs": [], "trust_boundary_crossings": [],
+            "truncation_reasons": [],
+        })
+
+
+def test_blast_projection_uses_only_explicit_compromised_refs_as_seeds():
+    projection = project_authority_decision({
+        "compromised_refs": ["session:a", "token:b"],
+        "reachable_subjects": [{
+            "subject_ref": "repo:affected",
+            "reachability_class": "REACHABLE",
+            "path_edge_ids": [], "supporting_edge_ids": [], "boundary_refs": [],
+        }],
+        "actionable_capabilities": [], "blocked_transitions": [],
+        "trust_boundary_refs": [], "trust_boundary_crossings": [],
+        "truncation_reasons": [],
+        "affected_refs": ["repo:affected"],
+    })
+    assert projection["compromise_seeds"] == ["session:a", "token:b"]
+    assert "repo:affected" not in projection["compromise_seeds"]
+    assert projection["semantics"]["affectedness_does_not_seed_compromise"] is True
+    assert projection["semantics"]["material_lineage_does_not_seed_compromise"] is True
+
+
+def test_blast_projection_rejects_affectedness_shaped_seed_identity():
+    with pytest.raises(ValueError, match="compromised_refs"):
+        project_authority_decision({
+            "compromised_refs": [{"ref": "token:b", "affected": True}],
+            "reachable_subjects": [], "actionable_capabilities": [], "blocked_transitions": [],
             "trust_boundary_refs": [], "trust_boundary_crossings": [],
             "truncation_reasons": [],
         })
