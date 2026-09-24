@@ -84,6 +84,16 @@ def _first_present(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple
     return None, False
 
 
+def _explicit_bool(source: Mapping[str, Any], key: str) -> tuple[bool | None, bool, bool]:
+    """Read a boolean authority claim without truthiness or scalar coercion."""
+    if key not in source:
+        return None, False, True
+    value = source.get(key)
+    if type(value) is not bool:
+        return None, True, False
+    return value, True, True
+
+
 def credential_constraints_satisfied(
     attributes: Mapping[str, Any],
     constraints: Mapping[str, Any],
@@ -104,18 +114,32 @@ def credential_constraints_satisfied(
     unresolved: set[str] = set()
     at = _at_utc(as_of)
 
-    revoked = constraints.get("revoked")
-    revocation_raw = constraints.get("revocation_state")
-    if revocation_raw is None:
-        revocation_raw = attributes.get("revocation_state")
-    revocation_state, revocation_valid = _explicit_state(revocation_raw)
-    if not revocation_valid:
-        unresolved.add("revocation_state")
-    elif revoked is True or revocation_state in {"revoked", "invalid", "disabled"}:
-        reasons.add("credential_or_edge_revoked")
+    # Boolean authority state is exact evidence. Strings such as "false", integers,
+    # mappings, and nulls must not be interpreted through Python truthiness or be
+    # silently ignored. Edge and credential state are independent restrictions:
+    # either one may revoke/deactivate, while neither may grant authority.
+    for source in (constraints, attributes):
+        revoked, revoked_present, revoked_valid = _explicit_bool(source, "revoked")
+        if revoked_present and not revoked_valid:
+            unresolved.add("revoked")
+        elif revoked is True:
+            reasons.add("credential_or_edge_revoked")
 
-    if constraints.get("active") is False or attributes.get("active") is False:
-        reasons.add("credential_or_edge_inactive")
+        active, active_present, active_valid = _explicit_bool(source, "active")
+        if active_present and not active_valid:
+            unresolved.add("active")
+        elif active is False:
+            reasons.add("credential_or_edge_inactive")
+
+    revocation_raw, revocation_present = _first_present(constraints, ("revocation_state",))
+    if not revocation_present:
+        revocation_raw, revocation_present = _first_present(attributes, ("revocation_state",))
+    if revocation_present:
+        revocation_state, revocation_valid = _explicit_state(revocation_raw)
+        if not revocation_valid or not revocation_state:
+            unresolved.add("revocation_state")
+        elif revocation_state in {"revoked", "invalid", "disabled"}:
+            reasons.add("credential_or_edge_revoked")
 
     expiry_raw, expiry_present = _first_present(constraints, ("expires_at",))
     if not expiry_present:
