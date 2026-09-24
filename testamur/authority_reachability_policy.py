@@ -177,14 +177,23 @@ def _failed_constraints(candidate: Mapping[str, Any], parent: Mapping[str, Any])
             reasons.add(f"{key}_not_preserved")
             failed.add(key)
 
-    if pc.get("expires_at") is not None:
-        parent_expiry = _parse_time(pc.get("expires_at"))
-        child_expiry = _parse_time(cc.get("expires_at"))
-        if parent_expiry is None or child_expiry is None:
+    parent_expiry_present = "expires_at" in pc
+    child_expiry_present = "expires_at" in cc
+    if parent_expiry_present or child_expiry_present:
+        parent_expiry = _parse_time(pc.get("expires_at")) if parent_expiry_present else None
+        child_expiry = _parse_time(cc.get("expires_at")) if child_expiry_present else None
+        if parent_expiry_present and parent_expiry is None:
             reasons.add("expiry_evidence_malformed")
             failed.add("expires_at")
             unresolved.add("expires_at")
-        elif child_expiry > parent_expiry:
+        elif child_expiry_present and child_expiry is None:
+            reasons.add("expiry_evidence_malformed")
+            failed.add("expires_at")
+            unresolved.add("expires_at")
+        elif parent_expiry is not None and child_expiry is None:
+            reasons.add("expiry_not_preserved")
+            failed.add("expires_at")
+        elif parent_expiry is not None and child_expiry is not None and child_expiry > parent_expiry:
             reasons.add("expiry_outside_delegation")
             failed.add("expires_at")
 
