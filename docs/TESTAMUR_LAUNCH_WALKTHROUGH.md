@@ -14,7 +14,7 @@ This walkthrough is deliberately product-first. It demonstrates the same first-u
 | 0:32–0:42 | First observation | Record the first revision and open its detail. | “This is the recorded version and its evidence. Recording is not a claim that the source is true or verified.” | `recorded ≠ verified` |
 | 0:42–0:52 | Demo Project | Switch to the deterministic read-only example and reveal a newer revision. | “Later, the source changes. Change is an event, not a verdict.” | `changed ≠ invalid` |
 | 0:52–1:02 | Compare | Open old ↔ new mechanical comparison inside one source or repository binding. | “Compare shows what mechanically changed between two observations of the same tracked basis.” | Do not compare unrelated repository bindings or infer validity from the diff. |
-| 1:02–1:13 | Impact | Follow recorded reliance edges to affected work. | “Impact answers a narrower question: which recorded work actually relied on the changed basis and may need review?” | `EXPOSED_TO_MODEL ≠ RELIED` |
+| 1:02–1:13 | Impact | Open one downstream review candidate, inspect its recorded basis/revision, then return to the selected change. | “Impact follows recorded reliance. The basis explains why this work was connected; the selected change is a separate question you still review.” | `EXPOSED_TO_MODEL ≠ RELIED`; provenance ≠ affectedness verdict. |
 | 1:13–1:22 | Revalidation | Open one affected item, inspect evidence, then record an explicit revalidation. If the Project has multiple repository bindings, show the Project-wide advisory review as a review queue, not a verdict. | “Project review can gather candidates across repositories, but each candidate keeps its repository and evidence context. You still decide what is actually affected.” | `stale ≠ false`; candidate ≠ affectedness verdict. |
 | 1:22–1:30 | Help / integrations | Open Help, then show Quickstart, Learn, Docs, Codex/MCP/plugin install entry points. | “Start with the five-minute quickstart, explore the example, or connect Testamur to the tools where work already happens.” | Canonical semantics remain inspectable from Docs. |
 
@@ -68,9 +68,20 @@ Narration contract: “Compare is evidence about difference. It is not a validit
 
 ### 5. Impact
 
-Open Impact and follow one affected item to its recorded reliance basis. Distinguish explicit reliance from material that was only fetched or exposed to a model.
+Open Impact and choose one downstream review candidate. Before discussing the selected change, inspect the candidate's recorded reliance basis/revision and, when the provider recorded it, the relation and recorded-at provenance. Then return to the selected change and decide whether that change warrants scoped revalidation.
 
-Narration contract: “Impact follows recorded reliance. Something appearing in context is not automatically evidence that the result relied on it.”
+The shot should make the review sequence visible rather than merely narrating it:
+
+1. identify the downstream work;
+2. inspect the recorded basis/revision that explains why the reliance edge exists;
+3. distinguish that provenance from the currently selected change;
+4. only then decide whether to continue into Revalidation.
+
+If a provider does not supply basis/revision provenance, show that provenance as unavailable. Do not invent a basis, infer a timestamp, or convert missing provenance into an affected/not-affected judgment for a cleaner demo.
+
+Distinguish explicit reliance from material that was only fetched or exposed to a model. A recorded basis explains the historical reliance edge; it does not by itself establish that the current selected change affects the downstream work.
+
+Narration contract: “Impact follows recorded reliance. This basis explains why the work is connected. Whether this particular change matters is the review we are doing now.”
 
 ### 6. Revalidation
 
@@ -121,6 +132,9 @@ Before publishing a recording or screenshots, verify all of the following:
 - advisory candidate aggregation is never presented as an affectedness verdict;
 - Compare precedes Impact in the changed-source story;
 - Impact demonstrates an actual recorded reliance edge;
+- Impact visibly inspects the recorded basis/revision before interpreting the selected change;
+- missing Impact provenance is shown as unavailable rather than guessed;
+- recorded reliance provenance is never presented as an affectedness verdict;
 - Revalidation is an explicit user action, not an automatic verdict;
 - no copy says or implies `recorded = verified`;
 - no copy says or implies `fetched = relied`;
