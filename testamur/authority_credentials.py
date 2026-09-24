@@ -22,10 +22,15 @@ def _explicit_string_set(value: Any) -> tuple[set[str], bool]:
 
 
 def _alias_values(source: Mapping[str, Any], aliases: tuple[str, ...]) -> tuple[set[str], bool, bool]:
-    """Read alternate encodings of one logical claim without unioning grants."""
+    """Read alternate encodings of one logical claim without unioning grants.
+
+    Presence is evidence. An explicitly present null/empty/typed alias is malformed,
+    not absent, and therefore cannot fall through to another alias or claim source.
+    Multiple aliases are alternate encodings of one claim and must agree exactly.
+    """
     observed: list[set[str]] = []
     for key in aliases:
-        if key not in source or source.get(key) is None:
+        if key not in source:
             continue
         values, valid = _explicit_string_set(source.get(key))
         if not valid:
