@@ -61,7 +61,8 @@ def test_concrete_product_service_reach_accepts_capability_selector_without_drop
     )
     assert result["ok"] is True
     assert result["schema"] == "testamur.product.authority-result.v1"
-    assert result["semantics"]["capability_filter_is_selector_not_authority_evidence"] is True
+    assert result["result"]["actionable_capabilities"] == []
+    assert result["semantics"]["connectivity_is_not_authorization"] is True
     assert result["decision"]["compromise_seeds"] == ["subject:a"]
 
 
