@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from .authority_exact import exact_nonempty_string
+from .authority_filter import normalize_capability_filter
 from .authority_product_service import (
     AuthorityProductService,
     authority_blast_product,
     authority_reach_product,
 )
+from .authority_seed import exact_subject_ref, normalize_compromise_seeds
 
 
 class AuthorityCliService(AuthorityProductService, Protocol):
@@ -24,15 +27,28 @@ class AuthorityCliService(AuthorityProductService, Protocol):
     ) -> dict[str, Any]: ...
 
 
+def _exact_optional_ref(value: Any, *, field: str) -> str | None:
+    if value is None:
+        return None
+    return exact_nonempty_string(value, field=field)
+
+
+def _exact_edge_ids(values: Any, *, field: str, allow_empty: bool = False) -> list[str]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple)):
+        raise ValueError(f"{field} must be a sequence of exact edge ids")
+    result = [exact_nonempty_string(value, field=f"{field}[]") for value in values]
+    if not allow_empty and not result:
+        raise ValueError(f"{field} requires at least one exact edge id")
+    return result
+
+
 def authority_subject_cli(service: AuthorityCliService, ref: str) -> dict[str, Any]:
     """Inspect one canonical authority subject and its exact recorded edges.
 
-    This is intentionally a pass-through read.  The CLI must not turn adjacency,
+    This is intentionally a pass-through read. The CLI must not turn adjacency,
     material lineage, reliance, or affectedness into permission evidence.
     """
-    if not ref.strip():
-        raise ValueError("authority subject requires a non-empty ref")
-    return service.authority_subject(ref.strip())
+    return service.authority_subject(exact_subject_ref(ref, field="authority_subject.ref"))
 
 
 def authority_explain_cli(
@@ -44,17 +60,17 @@ def authority_explain_cli(
     supporting_edge_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Explain an explicit ordered authority path plus separate support evidence."""
-    exact_edge_ids = [edge_id.strip() for edge_id in edge_ids]
-    if not exact_edge_ids or any(not edge_id for edge_id in exact_edge_ids):
-        raise ValueError("authority explain requires non-empty exact edge ids")
-    exact_support = [edge_id.strip() for edge_id in (supporting_edge_ids or [])]
-    if any(not edge_id for edge_id in exact_support):
-        raise ValueError("supporting authority edge ids must be non-empty")
     return service.authority_explain(
-        exact_edge_ids,
-        starting_ref=starting_ref,
-        expected_target_ref=expected_target_ref,
-        supporting_edge_ids=exact_support,
+        _exact_edge_ids(edge_ids, field="authority_explain.edge_ids"),
+        starting_ref=_exact_optional_ref(starting_ref, field="authority_explain.starting_ref"),
+        expected_target_ref=_exact_optional_ref(
+            expected_target_ref, field="authority_explain.expected_target_ref"
+        ),
+        supporting_edge_ids=_exact_edge_ids(
+            supporting_edge_ids or [],
+            field="authority_explain.supporting_edge_ids",
+            allow_empty=True,
+        ),
     )
 
 
@@ -71,16 +87,18 @@ def authority_reach_cli(
 ) -> dict[str, Any]:
     """Return the canonical product projection for ``authority reach``.
 
-    CLI code must not reinterpret raw authority-engine payloads.  In particular,
+    CLI code must not reinterpret raw authority-engine payloads. In particular,
     connectivity, material lineage, reliance, and affectedness are not permission
     evidence, unresolved constraints remain blocked, and capability filters only
     select already-recorded authority rather than granting it.
     """
     return authority_reach_product(
         service,
-        ref,
-        compromise_model=compromise_model,
-        capability_filter=capability_filter,
+        exact_subject_ref(ref, field="authority_reach.ref"),
+        compromise_model=exact_nonempty_string(
+            compromise_model, field="authority_reach.compromise_model"
+        ),
+        capability_filter=normalize_capability_filter(capability_filter),
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
@@ -102,9 +120,11 @@ def authority_blast_cli(
     """Return the canonical product projection for explicit compromise seeds."""
     return authority_blast_product(
         service,
-        refs,
-        compromise_model=compromise_model,
-        capability_filter=capability_filter,
+        normalize_compromise_seeds(refs),
+        compromise_model=exact_nonempty_string(
+            compromise_model, field="authority_blast.compromise_model"
+        ),
+        capability_filter=normalize_capability_filter(capability_filter),
         max_depth=max_depth,
         max_paths=max_paths,
         expansion_budget=expansion_budget,
