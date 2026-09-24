@@ -58,6 +58,7 @@ def test_reach_facade_projects_constraints_without_reinterpreting_them():
     )
     assert result["schema"] == "testamur.product.authority-result.v1"
     assert result["operation_schema"] == "testamur.product.authority-reachability.v1"
+    assert result["decision"]["compromise_seeds"] == ["subject:token"]
     capability = result["result"]["actionable_capabilities"][0]
     assert capability["constraints"]["scope"] == ["contents:write"]
     assert capability["constraints"]["audience"] == ["github.com"]
@@ -100,4 +101,6 @@ def test_blast_facade_projects_only_explicit_seed_result():
     assert result["schema"] == "testamur.product.authority-result.v1"
     assert result["semantics"]["affectedness_does_not_seed_compromise"] is True
     assert result["result"]["compromised_refs"] == ["subject:a", "subject:b"]
+    assert result["decision"]["compromise_seeds"] == ["subject:a", "subject:b"]
+    assert result["decision"]["semantics"]["compromise_seeds_are_explicit_authority_assumptions"] is True
     assert service.calls[0][1] == ["subject:a", "subject:b"]
