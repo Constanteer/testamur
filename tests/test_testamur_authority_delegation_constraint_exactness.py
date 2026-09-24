@@ -53,3 +53,40 @@ def test_falsey_provider_constraint_can_be_preserved_exactly():
     )
     # Exact preservation must not manufacture a rejection by itself.
     assert diagnostics is None
+
+
+def test_explicit_null_parent_expiry_is_malformed_not_absent():
+    diagnostics = _diagnostics(
+        {"expires_at": None},
+        {"expires_at": "2026-09-24T10:00:00Z"},
+    )
+    assert diagnostics is not None
+    assert "expiry_evidence_malformed" in diagnostics["reasons"]
+    assert "expires_at" in diagnostics["unresolved_constraints"]
+
+
+def test_parent_expiry_must_be_preserved_by_child():
+    diagnostics = _diagnostics(
+        {"expires_at": "2026-09-24T10:00:00Z"},
+        {},
+    )
+    assert diagnostics is not None
+    assert "expiry_not_preserved" in diagnostics["reasons"]
+    assert "expires_at" in diagnostics["failed_constraints"]
+
+
+def test_child_expiry_cannot_extend_parent_delegation():
+    diagnostics = _diagnostics(
+        {"expires_at": "2026-09-24T10:00:00Z"},
+        {"expires_at": "2026-09-24T11:00:00Z"},
+    )
+    assert diagnostics is not None
+    assert "expiry_outside_delegation" in diagnostics["reasons"]
+
+
+def test_child_may_narrow_parent_expiry():
+    diagnostics = _diagnostics(
+        {"expires_at": "2026-09-24T10:00:00Z"},
+        {"expires_at": "2026-09-24T09:00:00Z"},
+    )
+    assert diagnostics is None
