@@ -2,7 +2,7 @@
 
 > **Status:** clean-forwarded local exact-revision gateway on the landed Testamur 0.1 core.
 >
-> This document describes the landed post-0.1 local exact-revision Gateway. Semantic ownership remains with `TESTAMUR_CONVERGENCE.md`, `TESTAMUR_AGENT_WORKFLOW.md`, and the canonical Source / WorkSession stores.
+> This document describes the landed post-0.1 local exact-revision Gateway. Semantic ownership remains with `TESTAMUR_CONVERGENCE.md`, `TESTAMUR_OBJECT_CONTRACT.md`, and the canonical Source / WorkSession stores.
 
 ## Implemented path
 
