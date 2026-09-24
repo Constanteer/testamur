@@ -1,0 +1,9 @@
+Refund playbook
+===============
+
+Recorded basis: baseline/policy.txt
+Recorded basis statement: "Refund window: 30 days from delivery."
+
+Customer-support guidance:
+Offer the standard refund path for requests received within 30 days of delivery.
+Escalate exceptions to manual review.
