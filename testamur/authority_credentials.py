@@ -189,8 +189,14 @@ def credential_constraints_satisfied(
         elif not required.intersection(actual):
             reasons.add(f"{label}_mismatch")
 
+    # Interactive gates are restrictions on an already-explicit credential edge,
+    # never grants. Their representation is exact boolean evidence: a typed/null
+    # value must not disappear merely because `is True` would ignore it.
     for gate in ("approval_required", "human_confirmation_required", "mfa_required"):
-        if constraints.get(gate) is True:
+        required, present, valid = _explicit_bool(constraints, gate)
+        if present and not valid:
+            unresolved.add(gate)
+        elif required is True:
             reasons.add(gate)
 
     for key, value in constraints.items():
