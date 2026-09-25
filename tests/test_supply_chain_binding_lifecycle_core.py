@@ -30,5 +30,5 @@ def test_canonical_bound_scan_rejects_disabled_binding_before_observation(tmp_pa
 
     still_bound = service.projects.repository_binding(project["project_id"])
     assert still_bound is not None
-    assert still_bound["binding_id"] == binding["binding_id"]
+    assert still_bound["binding_id"] == binding["binding"]["binding_id"]
     assert still_bound["revision"]["binding_revision_id"] == before_revision

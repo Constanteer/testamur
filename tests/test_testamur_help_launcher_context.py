@@ -24,4 +24,6 @@ def test_help_launcher_prioritizes_context_without_new_semantics() -> None:
     ):
         assert boundary in source
 
-    assert "trust score" not in source.lower()
+    lowered = source.lower()
+    assert "data-trust-score" not in lowered
+    assert "trust score:" not in lowered

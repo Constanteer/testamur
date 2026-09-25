@@ -49,4 +49,4 @@ def test_impact_cards_expose_recorded_provenance_without_claiming_affectedness()
     # A recorded reliance edge explains historical provenance; it is not a
     # conclusion that the selected change affected or invalidated downstream
     # work. Keep that distinction visible in the review card itself.
-    assert 'does not say the selected change affected or invalidated downstream work' in GUIDE
+    assert 'it does not say this change affected or invalidated the downstream work' in GUIDE
