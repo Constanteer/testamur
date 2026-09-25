@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+defaults:
+  run:
+    shell: 'bash --noprofile --norc -eo pipefail "{0}"'
+
 jobs:
   pytest:
     runs-on: self-hosted
