@@ -57,7 +57,7 @@ def test_project_web_app_explains_binding_state_without_semantic_shortcuts():
         "Enable scans",
         "scanner eligibility only",
         "Each binding has independent scanner eligibility",
-        "does not mean the repository is invalid, affected, verified, or relied upon",
+        "It does not mean repository content was observed, verified, relied upon, invalid, safe, or affected.",
         "/v1/projects/repository-binding-state",
     ):
         assert phrase in script

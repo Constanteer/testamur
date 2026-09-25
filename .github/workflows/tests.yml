@@ -20,7 +20,7 @@ jobs:
         run: |
           rm -rf .venv-ci
           python3 -m venv .venv-ci
-          .venv-ci/bin/python -m pip install --disable-pip-version-check --upgrade pip pytest
+          .venv-ci/bin/python -m pip install --disable-pip-version-check --upgrade pip pytest "setuptools>=70" wheel
           .venv-ci/bin/python -m pip install -e .
       - name: Run test suite
         run: .venv-ci/bin/python -m pytest -q

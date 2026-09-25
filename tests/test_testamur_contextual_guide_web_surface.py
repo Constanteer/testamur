@@ -33,14 +33,15 @@ def test_contextual_guide_preserves_semantic_boundaries():
 def test_contextual_guide_ignores_its_own_dom_mutations():
     assert 'function onlyGuideMutations(records)' in GUIDE
     assert 'if (onlyGuideMutations(records)) return;' in GUIDE
-    assert 'queueMicrotask(render);' in GUIDE
+    assert 'queueMicrotask(() => {' in GUIDE
+    assert 'queueRender();' in GUIDE
 
 
 def test_impact_cards_expose_recorded_provenance_without_claiming_affectedness():
     # The Impact enhancement may only surface provenance supplied by the
     # provider. Missing provenance stays visibly missing rather than being
     # synthesized by the Web layer.
-    assert 'Recorded basis / revision' in GUIDE
+    assert 'Recorded basis' in GUIDE
     assert 'Not supplied by this provider' in GUIDE
     assert 'Inspect basis' in GUIDE
     assert 'Recorded at' in GUIDE

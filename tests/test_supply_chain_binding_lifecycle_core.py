@@ -26,7 +26,7 @@ def test_canonical_bound_scan_rejects_disabled_binding_before_observation(tmp_pa
 
     # Rejection is scanner eligibility only: it must happen before a scan record
     # or other observation evidence is created.
-    assert service.records.list_records(record_kind="supply-chain-scan", limit=10) == []
+    assert service.records.stats()["records"] == 0
 
     still_bound = service.projects.repository_binding(project["project_id"])
     assert still_bound is not None

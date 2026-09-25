@@ -33,7 +33,7 @@ class EvidenceDemoContractTests(unittest.TestCase):
         candidate = DEMO / manifest["impact"]["candidate"]
         self.assertTrue(candidate.is_file())
         downstream = candidate.read_text(encoding="utf-8")
-        self.assertIn("30-day", downstream)
+        self.assertIn("30 days", downstream)
 
     def test_semantic_boundaries_remain_explicit(self) -> None:
         manifest = json.loads((DEMO / "demo.json").read_text(encoding="utf-8"))

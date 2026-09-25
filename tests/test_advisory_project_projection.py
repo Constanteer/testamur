@@ -50,10 +50,10 @@ def test_project_projection_uses_only_latest_advisory_revision(tmp_path: Path) -
     store = TestamurAdvisoryStore(tmp_path / "testamur.sqlite3")
     target_ref = "component-revision:target"
     first = _record(store, "moves-away", upstream_refs=[target_ref])
-    store.revise_adverse_event(
-        first["event_id"],
+    _record(
+        store,
+        "moves-away",
         upstream_refs=["component-revision:replacement"],
-        source_refs=["source:moves-away-v2"],
     )
 
     candidates, unresolved_count = project_advisory_revisions_for_upstream_refs(
