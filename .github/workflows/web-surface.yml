@@ -14,13 +14,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+      - name: Toolchain
+        run: python3 --version && node --version
       - name: Check browser JavaScript
         run: node --check testamur/web/app.js
       - name: Run canonical Web tests
-        run: python -m unittest tests.test_testamur_web_app
+        run: python3 -m unittest tests.test_testamur_web_app
