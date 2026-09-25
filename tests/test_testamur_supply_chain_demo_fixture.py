@@ -57,4 +57,5 @@ def test_deterministic_demo_fixture_runs_real_project_scan_and_diff(tmp_path) ->
     assert diff["semantics"]["changed_implies_invalid"] is False
     assert diff["semantics"]["dependency_change_implies_vulnerable"] is False
     assert diff["semantics"]["affectedness_inferred"] is False
-    assert "trust_score" not in diff\n    assert "trust_score" not in diff["semantics"]
+    assert "trust_score" not in diff
+    assert "trust_score" not in diff["semantics"]
