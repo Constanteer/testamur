@@ -1,8 +1,8 @@
 # Testamur
 
-Testamur is a local-first provenance and revalidation layer for inspectable technical work.
+Testamur is a local-first provenance and revalidation layer for technical work that depends on changing sources.
 
-It records the exact source revisions a workflow saw or depended on, captures observable work-session events, preserves explicit reliance decisions, and helps identify what may need review when upstream sources change.
+It records the exact revisions a workflow saw or depended on, preserves explicit reliance decisions, and helps you find what may need review when documentation, repositories, APIs, packages, papers, or other upstream sources change.
 
 **New here? Start with the [five-minute quickstart](docs/TESTAMUR_5_MINUTE_QUICKSTART.md).** It uses an existing repository to show the Source → Revision → Compare → Impact → Revalidation mental model without requiring familiarity with Testamur's internal object names.
 
@@ -16,6 +16,16 @@ stale != false
 EXPOSED_TO_MODEL != RELIED
 lineage != affectedness verdict
 ```
+
+## Start here
+
+- **Web / hosted workspace:** https://testamur.org
+- **Manifesto:** https://manifesto.testamur.org
+- **Integrations:** https://testamur.org/integrations
+- **Five-minute quickstart:** [docs/TESTAMUR_5_MINUTE_QUICKSTART.md](docs/TESTAMUR_5_MINUTE_QUICKSTART.md)
+
+The hosted workspace is optional. The core runtime, CLI, Source Gateway and local Web interface can all be used locally.
+
 
 ## What it provides
 
@@ -105,6 +115,14 @@ testamur-gateway-mcp
 The MCP process is intended to be started by an MCP host rather than used as an interactive CLI.
 
 Host-specific integrations and their documentation live in the separate `Constanteer/testamur-plugins` repository. The core repository keeps only host-neutral product, data-model, CLI, API, provenance, impact and revalidation documentation.
+
+### Marketplace availability
+
+The canonical distribution surface for Testamur integrations is currently the public source repository and its GitHub Releases.
+
+The Codex integration is usable from `Constanteer/testamur-plugins`, but it is **not currently listed in host-operated plugin marketplaces**. The maintainer is under 18 and cannot yet complete some third-party publisher/account eligibility steps required for those listings. This affects marketplace discovery and one-click distribution only; it does not change the plugin, MCP, or local Testamur runtime.
+
+Until those listings are available, use the documented GitHub/source installation path and pin a release tag or exact commit when reproducibility matters.
 
 ## Local state
 
