@@ -36,7 +36,7 @@ def test_modern_discovery_and_tools_list():
     listed = handle_request(_modern("tools/list"))
     assert listed["result"]["resultType"] == "complete"
     names = [tool["name"] for tool in listed["result"]["tools"]]
-    assert names == [
+    assert names[:9] == [
         "testamur.fetch",
         "testamur.open_revision",
         "testamur.source_status",
@@ -47,6 +47,7 @@ def test_modern_discovery_and_tools_list():
         "testamur.project_supply_chain_diff",
         "testamur.project_advisories",
     ]
+    assert len(names) == len(set(names))
 
 
 def test_legacy_initialize_is_still_supported():

@@ -14,7 +14,8 @@ def test_project_supply_chain_surface_hydrates_latest_mechanical_diff():
 
 def test_project_review_surface_attaches_mechanical_diff_without_trust_score():
     source = (Path(__file__).parents[1] / "testamur" / "project_review_surface.py").read_text()
-    assert "diff_project_supply_chain(service, ref)" in source
-    assert '"latest_scan_diff_is_mechanical": True' in source
+    assert "diff_project_supply_chain(" in source
+    assert "to_scan_revision_id=scan_revision_id or None" in source
+    assert '"latest_binding_scan_diff_is_mechanical": True' in source
     assert '"version_direction_implies_safety": False' in source
     assert '"generic_trust_score_used": False' in source

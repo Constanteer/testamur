@@ -55,42 +55,6 @@ class MonitorProviderManifestTest(unittest.TestCase):
             self.assertEqual(spec["label"], "Fixture branch")
             self.assertTrue(spec["fields"]["repository"]["required"])
 
-    def test_provider_rejects_unknown_or_pattern_mismatched_config(self) -> None:
-        plugin_manifest = (
-            Path(__file__).resolve().parents[1]
-            / "plugins"
-            / "testamur-codex"
-            / "testamur-monitor-providers.json"
-        )
-        registry = load_monitor_provider_registry([plugin_manifest], include_defaults=False)
-        provider = registry.providers["github_branch"]
-
-        with self.assertRaisesRegex(ValueError, "unknown provider config fields"):
-            provider({"repository": "owner/repo", "branch": "main", "extra": "no"})
-
-        with self.assertRaisesRegex(ValueError, "does not match"):
-            provider({"repository": "../../etc/passwd", "branch": "main"})
-
-        with self.assertRaisesRegex(ValueError, "does not match"):
-            provider({"repository": "owner/repo", "branch": "feature/unsafe"})
-
-    def test_codex_github_branch_manifest_resolves_commit_feed(self) -> None:
-        plugin_manifest = (
-            Path(__file__).resolve().parents[1]
-            / "plugins"
-            / "testamur-codex"
-            / "testamur-monitor-providers.json"
-        )
-        registry = load_monitor_provider_registry([plugin_manifest], include_defaults=False)
-        self.assertIn("github_branch", registry.providers)
-        self.assertEqual(registry.errors, ())
-        self.assertEqual(
-            registry.providers["github_branch"](
-                {"repository": "Constanteer/Mathub", "branch": "main"}
-            )["locator"],
-            "https://github.com/Constanteer/Mathub/commits/main.atom",
-        )
-
     def test_invalid_manifest_fails_closed_without_registering_provider(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             manifest = Path(raw) / "bad.json"

@@ -3,10 +3,16 @@ from __future__ import annotations
 from testamur.project_review_surface import project_with_advisory_reviews
 
 
+class _Projects:
+    def repository_bindings(self, ref):
+        return []
+
+
 class _Service:
     def __init__(self, database_path, payload):
         self.database_path = database_path
         self._payload = payload
+        self.projects = _Projects()
 
     def project(self, ref):
         assert ref == "project:demo"
@@ -27,6 +33,7 @@ def test_project_surface_enriches_unassessed_candidate_without_verdict(tmp_path)
                 "status": "exact_identity_overlap",
             }],
             "semantics": {"advisory_candidate_is_not_affectedness_verdict": True},
+            "diff": {"ok": True, "counts": {}},
         },
     }
     service = _Service(tmp_path / "testamur.db", payload)

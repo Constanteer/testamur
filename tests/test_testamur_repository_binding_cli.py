@@ -19,7 +19,7 @@ def test_repository_binding_cli_disable_blocks_scan_and_reenable_restores_it(tmp
     out = io.StringIO()
     assert dispatch(["scan", project["project_id"]], stdout=out, service=service) == 2
     assert "is disabled" in out.getvalue()
-    assert service.records.list_records(record_kind="supply-chain-scan", limit=10) == []
+    assert service.records.stats()["records"] == 0
 
     out = io.StringIO()
     assert dispatch(["enable", project["project_id"]], stdout=out, service=service) == 0

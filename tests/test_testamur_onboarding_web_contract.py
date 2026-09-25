@@ -65,7 +65,9 @@ def test_launch_surfaces_do_not_introduce_generic_trust_score():
     launch_end = APP.index("async function statusPage")
     launch_surface = APP[launch_start:launch_end].lower()
 
-    assert "trust score" not in launch_surface
+    assert "it is not a global trust score" in launch_surface
+    assert "trust score:" not in launch_surface
+    assert "data-trust-score" not in launch_surface
     assert "confidence score" not in launch_surface
     assert "recorded ≠ verified" in launch_surface
     assert "changed ≠ invalid" in launch_surface

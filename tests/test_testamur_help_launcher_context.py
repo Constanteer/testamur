@@ -10,9 +10,9 @@ def test_help_launcher_prioritizes_context_without_new_semantics() -> None:
     source = HELP.read_text(encoding="utf-8")
 
     assert "data-contextual-help" in source
-    assert "Read Compare → Impact" in source
-    assert "Read Source → Revision" in source
-    assert "Read Revision → Impact" in source
+    assert "Inspect recorded reliance before deciding what a scan change means" in source
+    assert "Separate source identity from recorded observations" in source
+    assert "Trace explicit recorded reliance before scoped revalidation" in source
     assert "Run the 5-minute quickstart" in source
 
     for boundary in (
