@@ -142,7 +142,7 @@ The release gate validates the exact Testamur package surface and runs the curre
 
 ## Release
 
-The first public release line is **v1.0.0**.
+The current public release line is **v1.1.0**. The original `v1.0.0` tag remains immutable as the initial release baseline.
 
 ## License
 

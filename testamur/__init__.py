@@ -11,7 +11,7 @@ from .store_lifecycle import install_store_connection_lifecycle
 from .supply_chain_diff_lifecycle import install_dependency_version_transitions
 from .supply_chain_lifecycle import install_immutable_scan_observations
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Repository-binding identifiers are package-owned stable storage identifiers.
 # Keep these assignments here until project_store's next schema edit can inline
