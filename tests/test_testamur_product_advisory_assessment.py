@@ -7,7 +7,7 @@ import pytest
 
 from testamur.advisory import AdverseEventClass, TestamurAdvisoryStore
 from testamur.affectedness import TestamurAffectednessStore
-from testamur.product_advisory_assessment import assess_advisory_candidate
+from testamur.product_advisory_actions import assess_advisory_candidate
 
 
 def _revision(database: Path) -> dict:

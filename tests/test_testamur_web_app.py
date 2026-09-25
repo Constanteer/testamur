@@ -123,7 +123,7 @@ class TestamurCanonicalWebTest(unittest.TestCase):
         self.assertIn("verification-card", app)
         self.assertIn("Request accepted. Delivery is not confirmed until the email arrives.", app)
         self.assertIn("['/signin', '/signup', '/verify-email', '/verify-email-pending']", (WEB_ROOT / "first-run-resume.js").read_text(encoding="utf-8")) 
-        self.assertIn("You cannot sign in until this email address is verified.", app)
+        self.assertIn("We sent a 6-digit code and a verification link. Use whichever is easier.", app)
         self.assertIn("error.code === 'email_verification_required'", app)
         self.assertIn("history.replaceState", app)
         self.assertIn("Mechanical comparison only", app)
