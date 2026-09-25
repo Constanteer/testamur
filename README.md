@@ -162,6 +162,12 @@ The release gate validates the exact Testamur package surface and runs the curre
 
 The current public release line is **v1.1.0**. The original `v1.0.0` tag remains immutable as the initial release baseline.
 
+## Maintainer and development note
+
+Testamur is currently maintained by a full-time student. Development happens around school, exams, and other academic commitments; during high-pressure school periods, issue and pull-request response times may be slower than for a full-time project.
+
+AI tools have been used extensively during development for implementation, refactoring, testing, documentation, and review. Product direction, architecture, release decisions, and final responsibility remain with the maintainer. AI-generated output is not treated as verification: important behavior is expected to be backed by tests, inspectable code, reproducible builds, or the relevant external verifier.
+
 ## License
 
 Testamur is licensed under the [Apache License 2.0](LICENSE).
