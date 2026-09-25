@@ -39,6 +39,9 @@ def test_identical_rescan_appends_observation_without_revising_state(tmp_path) -
         "dependencies_added": 0,
         "dependencies_removed": 0,
         "dependencies_changed": 0,
+        "dependencies_upgraded": 0,
+        "dependencies_downgraded": 0,
+        "dependencies_version_changed_unclassified": 0,
     }
     assert diff["semantics"]["mechanical_only"] is True
     assert diff["semantics"]["changed_implies_invalid"] is False

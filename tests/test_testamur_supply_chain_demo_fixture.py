@@ -48,7 +48,7 @@ def test_deterministic_demo_fixture_runs_real_project_scan_and_diff(tmp_path) ->
     assert [item["version"] for item in changed["before"]] == ["2.32.4"]
     assert [item["version"] for item in changed["after"]] == ["2.32.5"]
     assert changed["version_transition"] == "upgraded"
-    assert changed["version_transition_is_mechanical"] is True
+    assert diff["semantics"]["version_transition_is_mechanical"] is True
 
     removed = diff["dependencies"]["removed"][0]
     assert removed["name"] == "flask"

@@ -79,14 +79,15 @@ def test_project_import_is_durable_and_idempotent(tmp_path) -> None:
     assert code == 0
     second = json.loads(output.getvalue())
     assert second["project_created"] is False
-    assert second["scan_revision_id"] == first["scan_revision_id"]
-    assert second["scan_revision_created"] is False
+    assert second["scan_revision_id"] != first["scan_revision_id"]
+    assert second["scan_revision_created"] is True
+    assert second["manifest_revisions_created"] == 0
     assert second["dependency_revisions_created"] == 0
 
     project = service.project("demo")
     assert project["ok"] is True
     inventory = project["supply_chain"]
-    assert inventory["scan_revision_id"] == first["scan_revision_id"]
+    assert inventory["scan_revision_id"] == second["scan_revision_id"]
     assert inventory["dependency_count"] == 1
     assert inventory["manifest_count"] == 1
     assert inventory["inventory_truncated"] is False

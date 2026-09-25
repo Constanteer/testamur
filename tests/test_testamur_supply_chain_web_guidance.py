@@ -19,8 +19,8 @@ def test_supply_chain_guidance_is_loaded_and_semantically_bounded() -> None:
     assert "a changed dependency is not therefore invalid or affected" in script
     assert "inspect impact and advisory candidates" in script
     assert "supply-chain-transition-row" in script
-    assert "before_version" in script
-    assert "after_version" in script
+    assert "versionFrom(item, 'before')" in script
+    assert "versionFrom(item, 'after')" in script
     assert "version_transition" in script
     assert "supply-chain-transition-kind" in css
     assert "verified" not in script.casefold()
